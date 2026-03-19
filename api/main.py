@@ -25,17 +25,18 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     setup_logging()
 
+    # Always init DB (needed for auth, even on serverless)
+    try:
+        from memory.db import init_db, seed_admin
+
+        await init_db()
+        await seed_admin()
+    except Exception:
+        logger.exception("DB init failed — continuing without database")
+
+    # Only run background scheduler in long-running server mode (Docker / local)
     task = None
     if not IS_SERVERLESS:
-        # Only init DB and scheduler in long-running server mode (Docker / local)
-        try:
-            from memory.db import init_db, seed_admin
-
-            await init_db()
-            await seed_admin()
-        except Exception:
-            logger.exception("DB init failed — continuing without database")
-
         try:
             from scheduler.worker import SchedulerWorker
 
