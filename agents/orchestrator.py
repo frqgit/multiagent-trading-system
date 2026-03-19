@@ -281,23 +281,40 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
     # ── General financial Q&A (web search + LLM) ─────────────────────────
     async def _handle_general_question(self, query: str) -> dict[str, Any]:
         """Answer general financial questions using web search."""
-        # Search the web
+        import os
+        is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+        # Search the web (fewer results on serverless to stay within timeout)
         try:
-            search_results = await web_search(query, max_results=5)
+            search_results = await asyncio.wait_for(
+                web_search(query, max_results=3 if is_serverless else 5),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[%s] Web search timed out for: %s", self.name, query)
+            search_results = []
         except Exception as exc:
             logger.warning("[%s] Web search failed: %s", self.name, exc)
             search_results = []
 
-        # Fetch top results for deeper context
+        # Fetch top results for deeper context (fewer on serverless)
         fetched_content = ""
         if search_results:
+            max_fetches = 1 if is_serverless else 3
             fetch_tasks = []
-            for r in search_results[:3]:
+            for r in search_results[:max_fetches]:
                 url = r.get("url", "")
                 if url:
-                    fetch_tasks.append(web_fetch(url, max_chars=8000))
+                    fetch_tasks.append(web_fetch(url, max_chars=4000 if is_serverless else 8000))
             if fetch_tasks:
-                pages = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+                try:
+                    pages = await asyncio.wait_for(
+                        asyncio.gather(*fetch_tasks, return_exceptions=True),
+                        timeout=8.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("[%s] Web fetch timed out", self.name)
+                    pages = []
                 for page in pages:
                     if isinstance(page, dict) and "content" in page:
                         fetched_content += f"\n--- Source: {page.get('url', '?')} ---\n"
@@ -318,10 +335,26 @@ Fetched Page Content:
             answer = await llm_chat(
                 _QA_SYSTEM,
                 f'User question: "{query}"\n\nWeb Research:\n{context}',
-                max_tokens=2048,
+                max_tokens=1500 if is_serverless else 2048,
             )
         except Exception as exc:
-            answer = f"I searched for information but couldn't generate an answer: {exc}"
+            logger.error("[%s] LLM Q&A failed: %s (%s)", self.name, exc, type(exc).__name__)
+            # Fallback: try a simpler LLM call without web context
+            try:
+                answer = await llm_chat(
+                    "You are a helpful financial assistant. Answer concisely using your knowledge.",
+                    f'User question: "{query}"',
+                    max_tokens=800,
+                )
+            except Exception as fallback_exc:
+                logger.error("[%s] LLM fallback also failed: %s", self.name, fallback_exc)
+                if search_results:
+                    # At least return the search snippets
+                    answer = "**I found some results but couldn't generate a summary:**\n\n"
+                    for r in search_results[:3]:
+                        answer += f"- [{r.get('title', 'N/A')}]({r.get('url', '')})\n  {r.get('snippet', '')}\n\n"
+                else:
+                    answer = f"Sorry, I'm unable to process this request right now. Please try again in a moment. (Error: {fallback_exc})"
 
         return {
             "type": "general_question",

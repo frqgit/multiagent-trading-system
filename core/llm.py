@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,6 +16,7 @@ from core.config import get_settings
 logger = logging.getLogger(__name__)
 
 _client: AsyncOpenAI | None = None
+_IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
 # ── Pricing per 1M tokens (USD) — update when model pricing changes ──────
 MODEL_PRICING: dict[str, dict[str, float]] = {
@@ -86,9 +88,15 @@ def get_current_usage() -> TokenUsage | None:
 
 def _get_client() -> AsyncOpenAI:
     global _client
-    if _client is None:
+    # On serverless, don't cache the client — container freeze/thaw causes
+    # stale HTTP connections that raise APIConnectionError.
+    if _client is None or _IS_SERVERLESS:
         settings = get_settings()
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
+        _client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            timeout=45.0,
+            max_retries=3,
+        )
     return _client
 
 
