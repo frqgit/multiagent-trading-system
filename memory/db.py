@@ -73,13 +73,17 @@ _session_factory = None
 def _get_engine():
     global _engine
     if _engine is None:
+        import os
         settings = get_settings()
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=False,
-            pool_size=5,
-            max_overflow=10,
-        )
+        engine_kwargs: dict = {"echo": False}
+        if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+            # Serverless: use NullPool (no persistent connections)
+            from sqlalchemy.pool import NullPool
+            engine_kwargs["poolclass"] = NullPool
+        else:
+            engine_kwargs["pool_size"] = 5
+            engine_kwargs["max_overflow"] = 10
+        _engine = create_async_engine(settings.database_url, **engine_kwargs)
     return _engine
 
 

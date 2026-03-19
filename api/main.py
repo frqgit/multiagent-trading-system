@@ -73,6 +73,23 @@ app.include_router(admin_router)
 app.include_router(analysis_router)
 
 
+@app.get("/api/v1/debug/db")
+async def debug_db():
+    """Temporary endpoint to diagnose DB connection issues."""
+    import traceback
+    from core.config import get_settings
+    settings = get_settings()
+    # Mask the password in the URL for safety
+    db_url = settings.database_url
+    masked = db_url[:30] + "..." if len(db_url) > 30 else db_url
+    try:
+        from memory.db import init_db
+        await init_db()
+        return {"status": "ok", "db_url_prefix": masked}
+    except Exception as e:
+        return {"status": "error", "db_url_prefix": masked, "error": str(e), "traceback": traceback.format_exc()}
+
+
 @app.get("/")
 async def root():
     return {
