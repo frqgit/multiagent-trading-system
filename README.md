@@ -500,23 +500,47 @@ The FastAPI backend can be deployed as a Vercel serverless function.
 2. A hosted PostgreSQL database ([Neon](https://neon.tech), [Supabase](https://supabase.com), or similar)
 3. A hosted Redis instance ([Upstash](https://upstash.com) or similar)
 
-### Deploy Steps
+### CLI Deployment
 
-1. **Push to GitHub** (see above)
+```bash
+# 1. Install Vercel CLI
+npm install -g vercel
 
-2. **Import project** on [vercel.com/new](https://vercel.com/new) → select your GitHub repo
+# 2. Login to Vercel
+vercel login
 
-3. **Set environment variables** in Vercel dashboard → Settings → Environment Variables:
+# 3. Set environment secrets (run each one, you'll be prompted to enter the value)
+vercel env add OPENAI_API_KEY
+vercel env add NEWS_API_KEY
+vercel env add DATABASE_URL
+vercel env add REDIS_URL
+vercel env add SECRET_KEY
 
-   | Variable | Value |
-   |----------|-------|
-   | `OPENAI_API_KEY` | Your OpenAI key |
-   | `NEWS_API_KEY` | Your NewsAPI key |
-   | `DATABASE_URL` | `postgresql+asyncpg://user:pass@host/db` (hosted DB) |
-   | `REDIS_URL` | `redis://user:pass@host:port` (hosted Redis) |
-   | `SECRET_KEY` | A strong random string |
+# 4. Deploy to preview (test it first)
+vercel
 
-4. **Deploy** — Vercel auto-detects `vercel.json` and builds the Python function
+# 5. Deploy to production
+vercel --prod
+
+# 6. Check deployment status
+vercel ls
+
+# 7. View production logs
+vercel logs YOUR_DEPLOYMENT_URL
+
+# 8. Open the deployed app in browser
+vercel open
+```
+
+### Environment Variables Reference
+
+| Variable | Example Value |
+|----------|---------------|
+| `OPENAI_API_KEY` | `sk-...` |
+| `NEWS_API_KEY` | `abc123...` |
+| `DATABASE_URL` | `postgresql+asyncpg://user:pass@neon-host/dbname` |
+| `REDIS_URL` | `redis://default:pass@upstash-host:6379` |
+| `SECRET_KEY` | A strong random string (use `openssl rand -hex 32`) |
 
 ### Vercel Config
 
@@ -524,20 +548,66 @@ The project includes `vercel.json` which routes all requests to the FastAPI app 
 
 > **Note**: Vercel serverless functions have a 10-second timeout on the free plan (60s on Pro). Complex multi-agent analyses may need the Pro plan.
 
+### Redeploying After Changes
+
+```bash
+# After making code changes:
+git add .
+git commit -m "your changes"
+git push origin main
+
+# Vercel auto-deploys from GitHub, or manually:
+vercel --prod
+```
+
 ---
 
 ## ☁️ Streamlit Cloud Deployment (Frontend)
 
-For the Streamlit UI, use [Streamlit Cloud](https://streamlit.io/cloud):
+### Option A: CLI via Streamlit Cloud (Recommended)
 
-1. Push your repo to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Select your repo, branch `main`, file `ui/streamlit_app.py`
-4. Set the **Advanced Settings** environment variable:
-   - `API_BASE_URL` = your Vercel deployment URL (e.g., `https://your-app.vercel.app`)
-5. Deploy
+```bash
+# 1. Install Streamlit (if not already)
+pip install streamlit
 
-The `.streamlit/config.toml` in this repo configures the dark theme automatically.
+# 2. Test locally first
+streamlit run ui/streamlit_app.py
+```
+
+Then deploy via the Streamlit Cloud dashboard:
+
+1. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub
+2. Click **"New app"**
+3. Select repo: `frqgit/multiagent-trading-system`, branch: `main`, file: `ui/streamlit_app.py`
+4. Under **Advanced settings**, add this secret:
+   ```toml
+   API_BASE_URL = "https://your-app.vercel.app"
+   ```
+5. Click **Deploy**
+
+### Option B: Self-Hosted Streamlit (Any Server)
+
+```bash
+# 1. Clone the repo on your server
+git clone https://github.com/frqgit/multiagent-trading-system.git
+cd multiagent-trading-system
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Set the API URL environment variable
+export API_BASE_URL="https://your-app.vercel.app"
+
+# 4. Run Streamlit (accessible on port 8501)
+streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+
+# 5. Run in background with nohup (Linux/Mac)
+nohup streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0 &
+```
+
+### Streamlit Config
+
+The `.streamlit/config.toml` in this repo configures the dark theme and server settings automatically.
 
 ---
 
@@ -564,4 +634,8 @@ This starts PostgreSQL, Redis, the FastAPI API, and the Streamlit UI together.
 ## 📝 License
 
 MIT
+
+## Generate SECRET_KEY
+
+To generate a strong one with openssl rand -hex 32 and update it via npx vercel env rm SECRET_KEY production then re-add it.
 

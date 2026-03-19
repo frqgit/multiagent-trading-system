@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,26 +14,40 @@ from api.routes.admin import router as admin_router
 from api.routes.analysis import router as analysis_router
 from api.routes.auth import router as auth_router
 from core.logging_config import setup_logging
-from memory.db import init_db, seed_admin
-from scheduler.worker import SchedulerWorker
+
+logger = logging.getLogger(__name__)
+
+IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     setup_logging()
-    await init_db()
-    await seed_admin()
 
-    # Start background scheduler
-    worker = SchedulerWorker()
-    task = asyncio.create_task(worker.start())
+    task = None
+    if not IS_SERVERLESS:
+        # Only init DB and scheduler in long-running server mode (Docker / local)
+        try:
+            from memory.db import init_db, seed_admin
+
+            await init_db()
+            await seed_admin()
+        except Exception:
+            logger.exception("DB init failed — continuing without database")
+
+        try:
+            from scheduler.worker import SchedulerWorker
+
+            worker = SchedulerWorker()
+            task = asyncio.create_task(worker.start())
+        except Exception:
+            logger.exception("Scheduler failed to start — continuing without scheduler")
 
     yield
 
-    # Shutdown
-    worker.stop()
-    task.cancel()
+    if task is not None:
+        task.cancel()
 
 
 app = FastAPI(
