@@ -75,6 +75,11 @@ def _get_engine():
     if _engine is None:
         import os
         settings = get_settings()
+        db_url = settings.database_url
+
+        # asyncpg doesn't understand ?sslmode=require — convert to ?ssl=require
+        db_url = db_url.replace("?sslmode=", "?ssl=").replace("&sslmode=", "&ssl=")
+
         engine_kwargs: dict = {"echo": False}
         if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
             # Serverless: use NullPool (no persistent connections)
@@ -83,7 +88,7 @@ def _get_engine():
         else:
             engine_kwargs["pool_size"] = 5
             engine_kwargs["max_overflow"] = 10
-        _engine = create_async_engine(settings.database_url, **engine_kwargs)
+        _engine = create_async_engine(db_url, **engine_kwargs)
     return _engine
 
 
