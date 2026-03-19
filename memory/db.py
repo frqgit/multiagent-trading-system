@@ -74,15 +74,25 @@ def _get_engine():
     global _engine
     if _engine is None:
         import os
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
         settings = get_settings()
         db_url = settings.database_url
 
-        # asyncpg doesn't understand ?sslmode=require — convert to ?ssl=require
-        db_url = db_url.replace("?sslmode=", "?ssl=").replace("&sslmode=", "&ssl=")
+        # asyncpg only supports 'ssl' param, not 'sslmode', 'channel_binding', etc.
+        # Strip unsupported params from the URL and keep only 'ssl' if needed.
+        parsed = urlparse(db_url)
+        if parsed.query:
+            params = parse_qs(parsed.query)
+            needs_ssl = "sslmode" in params or "ssl" in params
+            # Remove all params asyncpg doesn't understand
+            clean_params = {k: v[0] for k, v in params.items() if k in ("ssl",)}
+            if needs_ssl and "ssl" not in clean_params:
+                clean_params["ssl"] = "require"
+            clean_query = urlencode(clean_params)
+            db_url = urlunparse(parsed._replace(query=clean_query))
 
         engine_kwargs: dict = {"echo": False}
         if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-            # Serverless: use NullPool (no persistent connections)
             from sqlalchemy.pool import NullPool
             engine_kwargs["poolclass"] = NullPool
         else:
