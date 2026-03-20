@@ -404,13 +404,20 @@ Fetched Page Content:
         symbol = symbol.upper().strip()
         logger.info("[%s] Starting analysis pipeline for %s", self.name, symbol)
 
-        # Phase 1: Market data + News + Web Research in parallel
+        # Phase 1: Market data + News in parallel (research is optional, use timeout)
         market_task = asyncio.create_task(self.market_agent.analyze(symbol))
         news_task = asyncio.create_task(self.news_agent.analyze(symbol))
-        research_task = asyncio.create_task(self.research_agent.analyze(symbol))
-        market_data, news_data, research_data = await asyncio.gather(
-            market_task, news_task, research_task
-        )
+
+        # Research can be slow — give it a timeout
+        try:
+            research_task = asyncio.create_task(self.research_agent.analyze(symbol))
+            research_data = await asyncio.wait_for(asyncio.shield(research_task), timeout=25.0)
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] Research timed out or failed for %s: %s", self.name, symbol, exc)
+            research_data = self.research_agent._empty_result(symbol, f"Research unavailable: {exc}")
+
+        market_data = await market_task
+        news_data = await news_task
 
         if "error" in market_data and "price" not in market_data:
             return {
@@ -420,13 +427,52 @@ Fetched Page Content:
             }
 
         # Phase 2: Sentiment analysis (depends on news)
-        sentiment_data = await self.sentiment_agent.analyze(symbol, news_data)
+        try:
+            sentiment_data = await asyncio.wait_for(
+                self.sentiment_agent.analyze(symbol, news_data),
+                timeout=15.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] Sentiment analysis failed for %s: %s", self.name, symbol, exc)
+            sentiment_data = {
+                "symbol": symbol,
+                "sentiment": "neutral",
+                "confidence": 0.0,
+                "impact_level": "low",
+                "key_themes": [],
+                "reasoning": f"Sentiment analysis unavailable: {exc}",
+            }
 
         # Phase 3: Risk assessment (depends on market + sentiment)
-        risk_data = await self.risk_agent.analyze(market_data, sentiment_data)
+        try:
+            risk_data = await self.risk_agent.analyze(market_data, sentiment_data)
+        except Exception as exc:
+            logger.warning("[%s] Risk assessment failed for %s: %s", self.name, symbol, exc)
+            risk_data = {
+                "symbol": symbol,
+                "risk_score": 5,
+                "risk_level": "medium",
+                "warnings": [f"Risk assessment failed: {exc}"],
+                "constraints": [],
+                "allow_buy": True,
+                "allow_sell": True,
+            }
 
         # Phase 4: Final decision (depends on all — including web research)
-        decision = await self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data)
+        try:
+            decision = await asyncio.wait_for(
+                self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data),
+                timeout=20.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.error("[%s] Decision failed for %s: %s", self.name, symbol, exc)
+            decision = {
+                "symbol": symbol,
+                "action": "HOLD",
+                "confidence": 0.0,
+                "reasoning": f"Decision engine timed out or failed: {exc}",
+                "key_factors": [],
+            }
 
         elapsed = round(time.monotonic() - start, 2)
         logger.info("[%s] Pipeline complete for %s in %.2fs", self.name, symbol, elapsed)

@@ -45,7 +45,7 @@ class SentimentAgent:
         articles_text = ""
         for i, a in enumerate(articles[:10], 1):
             src = a.get('source', 'Unknown')
-            date = a.get('published', '')[:10]
+            date = a.get('published_at', a.get('published', ''))[:10]
             articles_text += f"{i}. [{src} | {date}] {a.get('title', 'N/A')}\n   {a.get('description', 'No description')}\n\n"
 
         if not articles_text.strip():

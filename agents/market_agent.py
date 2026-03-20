@@ -36,11 +36,21 @@ class MarketAnalystAgent:
 
     async def analyze(self, symbol: str) -> dict[str, Any]:
         logger.info("[%s] Analyzing %s", self.name, symbol)
-        try:
-            s: StockSnapshot = await asyncio.to_thread(fetch_stock_data, symbol)
-        except Exception as exc:
-            logger.error("[%s] Failed to fetch data for %s: %s", self.name, symbol, exc)
-            return {"error": str(exc), "symbol": symbol}
+        last_error = None
+        for attempt in range(2):  # 1 retry
+            try:
+                s: StockSnapshot = await asyncio.to_thread(fetch_stock_data, symbol)
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt == 0:
+                    logger.warning("[%s] Attempt 1 failed for %s: %s — retrying", self.name, symbol, exc)
+                    await asyncio.sleep(1)
+                else:
+                    logger.error("[%s] All attempts failed for %s: %s", self.name, symbol, exc)
+                    return {"error": str(exc), "symbol": symbol}
+        else:
+            return {"error": str(last_error), "symbol": symbol}
 
         signals: list[str] = []
 

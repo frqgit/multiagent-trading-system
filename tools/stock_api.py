@@ -111,14 +111,39 @@ def _safe(val, default=None):
 
 def fetch_stock_data(symbol: str, period: str = "6mo") -> StockSnapshot:
     """Fetch price history + company fundamentals and compute indicators."""
-    logger.info("Fetching stock data for %s (period=%s)", symbol, period)
-    ticker = yf.Ticker(symbol)
-    hist = ticker.history(period=period)
+    import signal
+    import threading
 
-    if hist.empty:
+    logger.info("Fetching stock data for %s (period=%s)", symbol, period)
+
+    # yfinance has no built-in timeout — enforce one via threading
+    ticker = yf.Ticker(symbol)
+    hist = None
+    fetch_error = None
+
+    def _fetch():
+        nonlocal hist, fetch_error
+        try:
+            hist = ticker.history(period=period)
+        except Exception as e:
+            fetch_error = e
+
+    t = threading.Thread(target=_fetch, daemon=True)
+    t.start()
+    t.join(timeout=30)  # 30s hard timeout for yfinance
+
+    if t.is_alive():
+        raise TimeoutError(f"yfinance timed out fetching {symbol} (30s)")
+    if fetch_error:
+        raise fetch_error
+    if hist is None or hist.empty:
         raise ValueError(f"No data returned for symbol: {symbol}")
 
-    info = ticker.info or {}
+    try:
+        info = ticker.info or {}
+    except Exception:
+        logger.warning("Failed to fetch ticker.info for %s, using empty dict", symbol)
+        info = {}
 
     closes = hist["Close"].values.astype(float)
     current_price = float(closes[-1])

@@ -69,4 +69,14 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # Warn about missing/placeholder API keys at startup
+    import logging
+    _logger = logging.getLogger(__name__)
+    if not settings.openai_api_key or settings.openai_api_key.startswith("sk-your"):
+        _logger.critical("OPENAI_API_KEY is missing or placeholder — LLM calls will fail!")
+    if not settings.news_api_key or settings.news_api_key == "your-newsapi-key-here":
+        _logger.warning("NEWS_API_KEY is missing or placeholder — news fetching will be disabled")
+    if not settings.brave_api_key:
+        _logger.info("BRAVE_API_KEY not set — web search will use DuckDuckGo fallback")
+    return settings

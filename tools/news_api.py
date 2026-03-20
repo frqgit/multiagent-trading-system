@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 NEWS_API_EVERYTHING = "https://newsapi.org/v2/everything"
 NEWS_API_HEADLINES = "https://newsapi.org/v2/top-headlines"
+
+_IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
 # Better mapping: ticker → (company name, extra search terms)
 TICKER_TO_SEARCH: dict[str, tuple[str, str]] = {
@@ -55,6 +58,13 @@ class NewsArticle:
 async def fetch_news(query: str, days_back: int = 7, max_articles: int = 12) -> list[NewsArticle]:
     """Fetch recent news articles. Uses stock-specific queries for better relevance."""
     settings = get_settings()
+
+    # Validate API key early
+    api_key = settings.news_api_key
+    if not api_key or api_key in ("your-newsapi-key-here", ""):
+        logger.warning("NEWS_API_KEY is not configured — skipping news fetch")
+        return []
+
     from_date = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
     # Build an optimized search query
@@ -71,12 +81,13 @@ async def fetch_news(query: str, days_back: int = 7, max_articles: int = 12) -> 
         "sortBy": "publishedAt",
         "pageSize": max_articles,
         "language": "en",
-        "apiKey": settings.news_api_key,
+        "apiKey": api_key,
     }
 
     articles: list[NewsArticle] = []
+    timeout = 10 if _IS_SERVERLESS else 20
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         # Primary: /everything endpoint
         try:
             resp = await client.get(NEWS_API_EVERYTHING, params=params)
@@ -105,7 +116,7 @@ async def fetch_news(query: str, days_back: int = 7, max_articles: int = 12) -> 
                     "category": "business",
                     "pageSize": 5,
                     "language": "en",
-                    "apiKey": settings.news_api_key,
+                    "apiKey": api_key,
                 }
                 resp2 = await client.get(NEWS_API_HEADLINES, params=hl_params)
                 resp2.raise_for_status()

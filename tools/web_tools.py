@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import ipaddress
 import logging
+import os
 import re
 import time
 import urllib.parse
@@ -22,6 +23,8 @@ from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
 # ---------------------------------------------------------------------------
 # Global rate limiter for DDG — prevent 202 Ratelimit from concurrent requests
 # ---------------------------------------------------------------------------
@@ -32,7 +35,7 @@ def _get_ddg_semaphore() -> asyncio.Semaphore:
     """Lazy-init semaphore (must be created inside a running event loop)."""
     global _ddg_semaphore
     if _ddg_semaphore is None:
-        _ddg_semaphore = asyncio.Semaphore(1)  # max 1 concurrent DDG search
+        _ddg_semaphore = asyncio.Semaphore(2)  # max 2 concurrent DDG searches
     return _ddg_semaphore
 
 
@@ -247,8 +250,13 @@ async def _brave_search(
 async def _ddg_search(query: str, max_results: int) -> list[dict[str, str]]:
     """Search via DuckDuckGo with rate limiting and retry."""
     import os
-    from duckduckgo_search import DDGS
-    from duckduckgo_search.exceptions import DuckDuckGoSearchException
+
+    try:
+        from duckduckgo_search import DDGS
+        from duckduckgo_search.exceptions import DuckDuckGoSearchException
+    except ImportError:
+        logger.warning("duckduckgo-search package not installed — DDG search unavailable")
+        return []
 
     is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
     max_attempts = 2 if is_serverless else 3
@@ -273,9 +281,17 @@ async def _ddg_search(query: str, max_results: int) -> list[dict[str, str]]:
                             })
                     return results
 
-                result = await asyncio.to_thread(_sync_search)
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(_sync_search),
+                    timeout=10.0 if is_serverless else 15.0,
+                )
                 if result:
                     return result
+            except asyncio.TimeoutError:
+                logger.warning("DDG search timed out (attempt %d/%d) for '%s'", attempt + 1, max_attempts, query)
+                if attempt < max_attempts - 1:
+                    continue
+                return []
             except DuckDuckGoSearchException as exc:
                 if "Ratelimit" in str(exc) and attempt < max_attempts - 1:
                     logger.info("DDG rate limited (attempt %d/%d), will retry: %s", attempt + 1, max_attempts, query)
@@ -356,7 +372,7 @@ async def web_fetch(
     }
 
     async with httpx.AsyncClient(
-        timeout=30,
+        timeout=15 if _IS_SERVERLESS else 30,
         follow_redirects=True,
         max_redirects=3,
     ) as client:

@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any
 
 from tools.web_tools import web_search, web_fetch
 
 logger = logging.getLogger(__name__)
+
+_IS_SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
 # Key financial sources to fetch for deep research
 _FINANCE_URLS: dict[str, str] = {
@@ -41,22 +44,37 @@ async def research_stock_web(symbol: str) -> dict[str, Any]:
     symbol_upper = symbol.upper()
     logger.info("Starting web research for %s", symbol_upper)
 
+    # On serverless, reduce scope to stay within timeout
+    if _IS_SERVERLESS:
+        search_queries = [
+            (f"{symbol_upper} stock analyst rating price target 2026", "analyst_ratings"),
+            (f"{symbol_upper} stock forecast outlook analysis", "outlook"),
+        ]
+        inter_search_delay = 1.0
+        max_pages = 3
+    else:
+        search_queries = [
+            (f"{symbol_upper} stock analyst rating price target 2026", "analyst_ratings"),
+            (f"{symbol_upper} earnings revenue quarterly results", "earnings"),
+            (f"{symbol_upper} stock forecast outlook analysis", "outlook"),
+            (f"{symbol_upper} SEC filing insider trading", "sec_filings"),
+        ]
+        inter_search_delay = 1.5
+        max_pages = 6
+
     # --- Phase 1: sequential web searches (avoid DDG rate limit) ---
-    search_queries = [
-        (f"{symbol_upper} stock analyst rating price target 2026", "analyst_ratings"),
-        (f"{symbol_upper} earnings revenue quarterly results", "earnings"),
-        (f"{symbol_upper} stock forecast outlook analysis", "outlook"),
-        (f"{symbol_upper} SEC filing insider trading", "sec_filings"),
-    ]
 
     categorized: dict[str, list[dict]] = {}
     all_urls: list[tuple[str, str]] = []  # (url, category)
     for i, (query, category) in enumerate(search_queries):
         if i > 0:
-            await asyncio.sleep(2.0)  # Delay between searches to avoid rate limits
+            await asyncio.sleep(inter_search_delay)
         try:
-            result = await web_search(query, max_results=3, freshness="month")
-        except Exception as exc:
+            result = await asyncio.wait_for(
+                web_search(query, max_results=3, freshness="month"),
+                timeout=10.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
             logger.warning("Search failed for '%s': %s", query, exc)
             result = []
         categorized[category] = result
@@ -67,19 +85,24 @@ async def research_stock_web(symbol: str) -> dict[str, Any]:
 
     # --- Phase 2: fetch top pages for deeper content ---
     fetch_tasks = [
-        web_fetch(url, max_chars=8000)
-        for url, _ in all_urls[:6]  # Cap at 6 pages to limit latency
+        web_fetch(url, max_chars=6000 if _IS_SERVERLESS else 8000)
+        for url, _ in all_urls[:max_pages]
     ]
-    fetch_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+    if fetch_tasks:
+        try:
+            fetch_results = await asyncio.wait_for(
+                asyncio.gather(*fetch_tasks, return_exceptions=True),
+                timeout=15.0 if _IS_SERVERLESS else 25.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Page fetch timed out for %s", symbol_upper)
+            fetch_results = []
+    else:
+        fetch_results = []
 
-    page_contents: dict[str, list[dict]] = {
-        "analyst_ratings": [],
-        "earnings": [],
-        "outlook": [],
-        "sec_filings": [],
-    }
+    page_contents: dict[str, list[dict]] = {cat: [] for cat in [q[1] for q in search_queries]}
 
-    for (url, category), result in zip(all_urls[:6], fetch_results):
+    for (url, category), result in zip(all_urls[:max_pages], fetch_results):
         if isinstance(result, Exception):
             logger.warning("Fetch failed for %s: %s", url, result)
             continue
@@ -125,6 +148,7 @@ async def _fetch_financial_pages(symbol: str) -> dict[str, str]:
     """Attempt to fetch key financial data pages directly."""
     pages: dict[str, str] = {}
     sym_lower = symbol.lower()
+    max_chars = 5000 if _IS_SERVERLESS else 10000
 
     urls_to_try = [
         ("stockanalysis", f"https://stockanalysis.com/stocks/{sym_lower}/"),
@@ -132,9 +156,12 @@ async def _fetch_financial_pages(symbol: str) -> dict[str, str]:
 
     for name, url in urls_to_try:
         try:
-            result = await web_fetch(url, max_chars=10000)
+            result = await asyncio.wait_for(
+                web_fetch(url, max_chars=max_chars),
+                timeout=8.0,
+            )
             pages[name] = result.get("content", "")[:5000]
-        except Exception as exc:
+        except (asyncio.TimeoutError, Exception) as exc:
             logger.debug("Direct fetch failed for %s (%s): %s", name, url, exc)
             pages[name] = ""
 
