@@ -65,11 +65,15 @@ if (-not $SkipDocker) {
 }
 
 if (-not $SkipVercel) {
-    if (-not (Get-Command vercel -ErrorAction SilentlyContinue)) {
-        Write-Warn "Vercel CLI not found. Install with: npm i -g vercel   (skipping Vercel deploy)"
-        $SkipVercel = $true
+    if (Get-Command vercel -ErrorAction SilentlyContinue) {
+        $VercelCmd = "vercel"
+        Write-Ok "Vercel CLI found (global)"
+    } elseif (Get-Command npx -ErrorAction SilentlyContinue) {
+        $VercelCmd = "npx vercel"
+        Write-Ok "Vercel CLI will run via npx"
     } else {
-        Write-Ok "Vercel CLI found"
+        Write-Warn "Neither vercel nor npx found. Install Node.js or run: npm i -g vercel   (skipping Vercel deploy)"
+        $SkipVercel = $true
     }
 }
 
@@ -165,9 +169,13 @@ if (-not $SkipDocker) {
 # ==================================================================
 if (-not $SkipVercel) {
     Write-Step "Deploying to Vercel (production)"
-    npx vercel --prod --yes
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail "Vercel deploy failed (exit code $LASTEXITCODE)"
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    Invoke-Expression "$VercelCmd --prod --yes 2>&1"
+    $vercelExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($vercelExit -ne 0) {
+        Write-Fail "Vercel deploy failed (exit code $vercelExit)"
         exit 1
     }
     Write-Ok "Vercel production deploy complete"
@@ -180,16 +188,21 @@ if (-not $SkipVercel) {
 # ==================================================================
 if (-not $SkipStreamlit) {
     Write-Step "Pushing to '$Branch' branch for Streamlit Cloud deploy"
+    # Git writes progress and remote info to stderr; relax ErrorAction.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
 
     $status = git status --porcelain 2>&1
     if ($status) {
         Write-Warn "Working tree has uncommitted changes - committing them now"
-        git add -A
-        git commit -m "deploy: auto-commit before Streamlit Cloud push $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        git add -A 2>&1 | Out-Null
+        git commit -m "deploy: auto-commit before Streamlit Cloud push $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1 | Out-Null
     }
 
-    git push origin $Branch 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    git push origin $Branch 2>&1 | Out-Null
+    $gitExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($gitExit -ne 0) {
         Write-Fail "Git push to '$Branch' failed. Check your remote config."
         exit 1
     }
