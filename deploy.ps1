@@ -165,7 +165,7 @@ if (-not $SkipDocker) {
 # ==================================================================
 if (-not $SkipVercel) {
     Write-Step "Deploying to Vercel (production)"
-    vercel --prod --yes
+    npx vercel --prod --yes
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Vercel deploy failed (exit code $LASTEXITCODE)"
         exit 1
