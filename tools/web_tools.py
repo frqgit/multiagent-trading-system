@@ -246,15 +246,18 @@ async def _brave_search(
 
 async def _ddg_search(query: str, max_results: int) -> list[dict[str, str]]:
     """Search via DuckDuckGo with rate limiting and retry."""
+    import os
     from duckduckgo_search import DDGS
     from duckduckgo_search.exceptions import DuckDuckGoSearchException
 
+    is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    max_attempts = 2 if is_serverless else 3
     sem = _get_ddg_semaphore()
 
-    for attempt in range(3):
+    for attempt in range(max_attempts):
         async with sem:
             if attempt > 0:
-                delay = 3.0 * (2 ** attempt)  # 6s, 12s
+                delay = 2.0 * (attempt + 1) if is_serverless else 3.0 * (2 ** attempt)
                 logger.debug("DDG retry %d for '%s', waiting %.1fs", attempt + 1, query, delay)
                 await asyncio.sleep(delay)
 
@@ -274,15 +277,14 @@ async def _ddg_search(query: str, max_results: int) -> list[dict[str, str]]:
                 if result:
                     return result
             except DuckDuckGoSearchException as exc:
-                if "Ratelimit" in str(exc) and attempt < 2:
-                    logger.info("DDG rate limited (attempt %d/3), will retry: %s", attempt + 1, query)
+                if "Ratelimit" in str(exc) and attempt < max_attempts - 1:
+                    logger.info("DDG rate limited (attempt %d/%d), will retry: %s", attempt + 1, max_attempts, query)
                     continue
                 raise
             except Exception:
                 raise
 
-        # Small delay between releasing semaphore and next iteration
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.5)
 
     return []
 

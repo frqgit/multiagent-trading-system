@@ -91,17 +91,25 @@ class OrchestratorAgent:
         logger.info("[%s] Received query: %s", self.name, user_message[:120])
 
         # Step 1: LLM-based intent classification
+        llm_available = True
         try:
             parsed = await llm_json(_ROUTER_SYSTEM, user_message)
         except Exception as exc:
             logger.error("[%s] Router LLM failed: %s", self.name, exc)
-            parsed = {"intent": "general_question", "symbols": [], "query": user_message}
+            llm_available = False
+            # Fallback: use regex-based symbol extraction instead of giving up
+            fallback_symbols = self.parse_symbols(user_message)
+            if fallback_symbols:
+                parsed = {"intent": "quick_status", "symbols": fallback_symbols, "query": user_message}
+            else:
+                parsed = {"intent": "general_question", "symbols": [], "query": user_message}
 
         intent = parsed.get("intent", "general_question")
         symbols = parsed.get("symbols", [])
         query = parsed.get("query", user_message)
 
-        logger.info("[%s] Routed → intent=%s, symbols=%s", self.name, intent, symbols)
+        logger.info("[%s] Routed → intent=%s, symbols=%s, llm_available=%s",
+                     self.name, intent, symbols, llm_available)
 
         # Step 2: Dispatch to the right handler
         if intent == "quick_status" and symbols:
@@ -171,16 +179,28 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
             )
         except Exception as exc:
             logger.error("[%s] Summary LLM failed: %s", self.name, exc)
-            # Fallback: produce a plain-text summary
+            # Fallback: produce a plain-text summary from the raw data
             parts = []
             for md in market_results:
                 if "price" in md:
+                    sym = md.get('symbol', '?')
+                    name = md.get('company_name', sym)
+                    change_pct = md.get('price_change_pct', 0)
+                    change_icon = "📈" if change_pct >= 0 else "📉"
                     parts.append(
-                        f"**{md['symbol']}** ({md.get('company_name', '')}): "
-                        f"${md['price']} ({md.get('price_change_pct', 0):+.2f}%) — "
-                        f"RSI {md.get('rsi', 'N/A')}, Trend: {md.get('trend', 'N/A')}"
+                        f"### {change_icon} {name} ({sym})\n"
+                        f"- **Price:** ${md['price']} ({change_pct:+.2f}%)\n"
+                        f"- **RSI:** {md.get('rsi', 'N/A')} | **Trend:** {md.get('trend', 'N/A')}\n"
+                        f"- **Day Range:** ${md.get('day_low', 'N/A')} – ${md.get('day_high', 'N/A')}\n"
+                        f"- **Volume:** {md.get('volume_formatted', 'N/A')} | **Market Cap:** {md.get('market_cap_formatted', 'N/A')}"
                     )
-            answer = "\n".join(parts) or f"Error generating summary: {exc}"
+                elif "error" in md:
+                    parts.append(f"**{md.get('symbol', '?')}**: Could not fetch data — {md['error']}")
+            if parts:
+                answer = "\n\n".join(parts)
+                answer += "\n\n> *AI summary unavailable — showing raw market data.*"
+            else:
+                answer = "⚠️ Could not fetch market data or generate a summary. Please try again."
 
         return {
             "type": "quick_status",
@@ -239,7 +259,8 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
                 max_tokens=1500,
             )
         except Exception as exc:
-            answer = f"Comparison data fetched but summary failed: {exc}"
+            logger.error("[%s] Comparison LLM failed: %s", self.name, exc)
+            answer = f"## Stock Comparison\n\n{comp_text}\n\n> *AI summary unavailable — showing raw comparison data.*"
 
         return {
             "type": "comparison",
@@ -269,7 +290,14 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
                 max_tokens=1200,
             )
         except Exception as exc:
-            answer = f"News fetched but summary failed: {exc}"
+            logger.error("[%s] News LLM failed: %s", self.name, exc)
+            if all_articles:
+                answer = "## Latest News\n\n"
+                for a in all_articles[:8]:
+                    answer += f"- **{a.get('title', 'N/A')}** ({a.get('source', '?')})\n  {a.get('description', '')[:200]}\n\n"
+                answer += "> *AI summary unavailable — showing raw headlines.*"
+            else:
+                answer = "No recent news found and AI summary unavailable."
 
         return {
             "type": "news_query",
@@ -349,12 +377,18 @@ Fetched Page Content:
             except Exception as fallback_exc:
                 logger.error("[%s] LLM fallback also failed: %s", self.name, fallback_exc)
                 if search_results:
-                    # At least return the search snippets
-                    answer = "**I found some results but couldn't generate a summary:**\n\n"
-                    for r in search_results[:3]:
+                    # At least return the search snippets formatted nicely
+                    answer = "**Here are the most relevant results I found:**\n\n"
+                    for r in search_results[:5]:
                         answer += f"- [{r.get('title', 'N/A')}]({r.get('url', '')})\n  {r.get('snippet', '')}\n\n"
+                    answer += "\n> *AI summary unavailable — the LLM service could not be reached. Showing raw search results instead.*"
                 else:
-                    answer = f"Sorry, I'm unable to process this request right now. Please try again in a moment. (Error: {fallback_exc})"
+                    answer = (
+                        "⚠️ **Service temporarily unavailable.** The AI language model could not be reached.\n\n"
+                        "Please check that the `OPENAI_API_KEY` environment variable is set correctly "
+                        "and that the OpenAI API is accessible from your deployment environment.\n\n"
+                        "Try again in a moment."
+                    )
 
         return {
             "type": "general_question",

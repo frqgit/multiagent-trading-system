@@ -3,7 +3,7 @@
   "version": 2,
   "functions": {
     "vercel_app.py": {
-      "maxDuration": 60
+      "maxDuration": 120
     }
   },
   "builds": [

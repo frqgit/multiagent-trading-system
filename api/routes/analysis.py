@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -10,6 +12,8 @@ from agents.orchestrator import OrchestratorAgent
 from core.auth import FREE_TIER_PROMPT_LIMIT, get_current_user
 from memory.db import User, _get_session_factory, save_analysis, get_history
 from memory.vector_store import vector_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
@@ -247,17 +251,22 @@ async def chat(req: ChatRequest, authorization: str = Header(None)):
     result = await orchestrator.chat(req.message)
 
     # ── Update user usage in DB ──
-    prompt_cost = result.get("token_usage", {}).get("cost_usd", 0)
-    factory = _get_session_factory()
-    async with factory() as session:
-        db_result = await session.execute(select(User).where(User.id == user["id"]))
-        db_user = db_result.scalar_one_or_none()
-        if db_user:
-            db_user.prompt_count += 1
-            db_user.total_cost_usd = float(db_user.total_cost_usd) + prompt_cost
-            if db_user.tier == "paid":
-                db_user.balance_usd = max(0, float(db_user.balance_usd) - prompt_cost)
-            await session.commit()
+    # Wrapped in try/catch so a transient DB failure doesn't discard
+    # the orchestrator's response the user is waiting for.
+    try:
+        prompt_cost = result.get("token_usage", {}).get("cost_usd", 0)
+        factory = _get_session_factory()
+        async with factory() as session:
+            db_result = await session.execute(select(User).where(User.id == user["id"]))
+            db_user = db_result.scalar_one_or_none()
+            if db_user:
+                db_user.prompt_count += 1
+                db_user.total_cost_usd = float(db_user.total_cost_usd) + prompt_cost
+                if db_user.tier == "paid":
+                    db_user.balance_usd = max(0, float(db_user.balance_usd) - prompt_cost)
+                await session.commit()
+    except Exception as db_exc:
+        logger.error("Failed to update user usage after chat: %s", db_exc)
 
     response: dict = {
         "answer": result.get("answer", ""),

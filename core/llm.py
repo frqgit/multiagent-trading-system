@@ -92,10 +92,14 @@ def _get_client() -> AsyncOpenAI:
     # stale HTTP connections that raise APIConnectionError.
     if _client is None or _IS_SERVERLESS:
         settings = get_settings()
+        # Shorter timeout + fewer retries on serverless to stay within
+        # Vercel / Lambda function time limits (typically 60 s).
+        timeout = 15.0 if _IS_SERVERLESS else 45.0
+        retries = 1 if _IS_SERVERLESS else 3
         _client = AsyncOpenAI(
             api_key=settings.openai_api_key,
-            timeout=45.0,
-            max_retries=3,
+            timeout=timeout,
+            max_retries=retries,
         )
     return _client
 
@@ -126,7 +130,14 @@ async def llm_chat(
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
 
-    response = await client.chat.completions.create(**kwargs)
+    try:
+        response = await client.chat.completions.create(**kwargs)
+    except Exception as exc:
+        exc_type = type(exc).__name__
+        logger.error("OpenAI API call failed (%s): %s [model=%s, serverless=%s]",
+                      exc_type, exc, resolved_model, _IS_SERVERLESS)
+        raise
+
     content = response.choices[0].message.content or ""
 
     # Track tokens
