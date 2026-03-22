@@ -639,3 +639,14 @@ MIT
 
 To generate a strong one with openssl rand -hex 32 and update it via npx vercel env rm SECRET_KEY production then re-add it.
 
+
+## Only one manual step:
+
+Go to Streamlit Cloud → your app → Settings (gear icon) → Secrets, and paste:
+
+API_BASE_URL = "https://multiagent-trading-system.vercel.app"
+
+VERCEL_AUTOMATION_BYPASS_SECRET = "XQIBPuMH7en3lEoSRvZFfVgOzaUNYGdc"
+
+Then click Save — Streamlit Cloud will reboot the app with these secrets, and all agent/LLM calls will flow through to your Vercel backend correctly.
+
