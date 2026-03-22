@@ -36,3 +36,7 @@ docker-compose.override.yml
 
 # Vercel
 .vercel
+.vercel_bypass_secret.tmp
+
+# Streamlit secrets (contains API keys - set via Cloud dashboard)
+.streamlit/secrets.toml

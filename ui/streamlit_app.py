@@ -7,10 +7,20 @@ import os
 import httpx
 import streamlit as st
 
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Read a config value from Streamlit secrets (Cloud) or env vars (Docker/local)."""
+    try:
+        return st.secrets[key]
+    except (KeyError, FileNotFoundError):
+        return os.getenv(key, default)
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000") + "/api/v1"
+API_BASE = _get_secret("API_BASE_URL", "http://localhost:8000") + "/api/v1"
+_VERCEL_BYPASS = _get_secret("VERCEL_AUTOMATION_BYPASS_SECRET")
 
 st.set_page_config(
     page_title="AI Multi-Agent Trading System",
@@ -192,8 +202,18 @@ if "show_admin" not in st.session_state:
 # ---------------------------------------------------------------------------
 
 def _auth_headers() -> dict:
+    headers: dict[str, str] = {}
     if st.session_state.auth_token:
-        return {"Authorization": f"Bearer {st.session_state.auth_token}"}
+        headers["Authorization"] = f"Bearer {st.session_state.auth_token}"
+    if _VERCEL_BYPASS:
+        headers["x-vercel-protection-bypass"] = _VERCEL_BYPASS
+    return headers
+
+
+def _bypass_headers() -> dict:
+    """Return only the Vercel bypass header (for unauthenticated calls)."""
+    if _VERCEL_BYPASS:
+        return {"x-vercel-protection-bypass": _VERCEL_BYPASS}
     return {}
 
 
@@ -202,7 +222,7 @@ def _api_register(email: str, name: str, password: str) -> dict:
         with httpx.Client(timeout=15) as client:
             resp = client.post(f"{API_BASE}/auth/register", json={
                 "email": email, "name": name, "password": password,
-            })
+            }, headers=_bypass_headers())
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPStatusError as exc:
@@ -219,7 +239,7 @@ def _api_login(email: str, password: str) -> dict:
         with httpx.Client(timeout=15) as client:
             resp = client.post(f"{API_BASE}/auth/login", json={
                 "email": email, "password": password,
-            })
+            }, headers=_bypass_headers())
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPStatusError as exc:
@@ -919,7 +939,7 @@ with st.sidebar:
     for _attempt in range(3):
         try:
             with httpx.Client(timeout=5) as client:
-                health = client.get(f"{API_BASE}/health").json()
+                health = client.get(f"{API_BASE}/health", headers=_bypass_headers()).json()
             st.success(f"API Online • Memory: {health.get('vector_store_count', 0)} entries")
             _health_ok = True
             break
@@ -934,7 +954,7 @@ with st.sidebar:
     if st.button("Load History", use_container_width=True):
         try:
             with httpx.Client(timeout=10) as client:
-                hist = client.get(f"{API_BASE}/history", params={"limit": 10}).json()
+                hist = client.get(f"{API_BASE}/history", params={"limit": 10}, headers=_auth_headers()).json()
             for rec in hist.get("records", []):
                 action = rec.get("action", "HOLD")
                 icon = {"BUY": "🟢", "SELL": "🔴"}.get(action, "🟡")
