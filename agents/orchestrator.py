@@ -400,9 +400,17 @@ Fetched Page Content:
     # ── Existing pipeline methods (unchanged) ─────────────────────────────
     async def analyze_symbol(self, symbol: str) -> dict[str, Any]:
         """Full pipeline analysis for a single symbol."""
+        import os
+        is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
         start = time.monotonic()
         symbol = symbol.upper().strip()
-        logger.info("[%s] Starting analysis pipeline for %s", self.name, symbol)
+        logger.info("[%s] Starting analysis pipeline for %s (serverless=%s)", self.name, symbol, is_serverless)
+
+        # Serverless-aware timeouts (must fit within Vercel maxDuration)
+        research_timeout = 10.0 if is_serverless else 25.0
+        sentiment_timeout = 8.0 if is_serverless else 15.0
+        decision_timeout = 10.0 if is_serverless else 20.0
 
         # Phase 1: Market data + News in parallel (research is optional, use timeout)
         market_task = asyncio.create_task(self.market_agent.analyze(symbol))
@@ -411,7 +419,7 @@ Fetched Page Content:
         # Research can be slow — give it a timeout
         try:
             research_task = asyncio.create_task(self.research_agent.analyze(symbol))
-            research_data = await asyncio.wait_for(asyncio.shield(research_task), timeout=25.0)
+            research_data = await asyncio.wait_for(asyncio.shield(research_task), timeout=research_timeout)
         except (asyncio.TimeoutError, Exception) as exc:
             logger.warning("[%s] Research timed out or failed for %s: %s", self.name, symbol, exc)
             research_data = self.research_agent._empty_result(symbol, f"Research unavailable: {exc}")
@@ -430,7 +438,7 @@ Fetched Page Content:
         try:
             sentiment_data = await asyncio.wait_for(
                 self.sentiment_agent.analyze(symbol, news_data),
-                timeout=15.0,
+                timeout=sentiment_timeout,
             )
         except (asyncio.TimeoutError, Exception) as exc:
             logger.warning("[%s] Sentiment analysis failed for %s: %s", self.name, symbol, exc)
@@ -462,7 +470,7 @@ Fetched Page Content:
         try:
             decision = await asyncio.wait_for(
                 self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data),
-                timeout=20.0,
+                timeout=decision_timeout,
             )
         except (asyncio.TimeoutError, Exception) as exc:
             logger.error("[%s] Decision failed for %s: %s", self.name, symbol, exc)

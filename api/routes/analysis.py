@@ -137,6 +137,8 @@ class HistoryResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     vector_store_count: int
+    llm_ready: bool = False
+    news_ready: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +209,20 @@ async def history(symbol: str | None = None, limit: int = 20):
 
 @router.get("/health", response_model=HealthResponse)
 async def health():
-    return HealthResponse(status="ok", vector_store_count=vector_store.count())
+    from core.config import get_settings
+    try:
+        settings = get_settings()
+        llm_ok = bool(settings.openai_api_key and not settings.openai_api_key.startswith("sk-your"))
+        news_ok = bool(settings.news_api_key and settings.news_api_key != "your-newsapi-key-here")
+    except Exception:
+        llm_ok = False
+        news_ok = False
+    return HealthResponse(
+        status="ok",
+        vector_store_count=vector_store.count(),
+        llm_ready=llm_ok,
+        news_ready=news_ok,
+    )
 
 
 @router.post("/search-memory")

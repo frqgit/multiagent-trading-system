@@ -219,7 +219,7 @@ def _bypass_headers() -> dict:
 
 def _api_register(email: str, name: str, password: str) -> dict:
     try:
-        with httpx.Client(timeout=15) as client:
+        with httpx.Client(timeout=30) as client:
             resp = client.post(f"{API_BASE}/auth/register", json={
                 "email": email, "name": name, "password": password,
             }, headers=_bypass_headers())
@@ -236,7 +236,7 @@ def _api_register(email: str, name: str, password: str) -> dict:
 
 def _api_login(email: str, password: str) -> dict:
     try:
-        with httpx.Client(timeout=15) as client:
+        with httpx.Client(timeout=30) as client:
             resp = client.post(f"{API_BASE}/auth/login", json={
                 "email": email, "password": password,
             }, headers=_bypass_headers())
@@ -253,7 +253,7 @@ def _api_login(email: str, password: str) -> dict:
 
 def _api_get_profile() -> dict | None:
     try:
-        with httpx.Client(timeout=10) as client:
+        with httpx.Client(timeout=15) as client:
             resp = client.get(f"{API_BASE}/auth/me", headers=_auth_headers())
             resp.raise_for_status()
             return resp.json().get("user")
@@ -273,15 +273,17 @@ def _call_api(message: str) -> dict:
             resp.raise_for_status()
             return resp.json()
     except httpx.ConnectError:
-        return {"error": "Cannot connect to API server. Ensure it's running."}
+        return {"error": "Cannot connect to API server. Check that the backend is deployed and API_BASE_URL is correct."}
+    except httpx.ReadTimeout:
+        return {"error": "Request timed out. The analysis is taking too long — try a simpler query or single stock."}
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
         except Exception:
-            detail = str(exc)
+            detail = f"HTTP {exc.response.status_code}: {exc.response.text[:200]}"
         return {"error": detail}
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": f"Unexpected error: {exc}"}
 
 
 def _fmt_number(n, decimals=2) -> str:
@@ -936,18 +938,23 @@ with st.sidebar:
 
     st.markdown("### 📡 System Status")
     _health_ok = False
-    for _attempt in range(3):
-        try:
-            with httpx.Client(timeout=5) as client:
-                health = client.get(f"{API_BASE}/health", headers=_bypass_headers()).json()
-            st.success(f"API Online • Memory: {health.get('vector_store_count', 0)} entries")
-            _health_ok = True
-            break
-        except Exception:
-            import time as _time
-            _time.sleep(1)
+    _health_data = {}
+    try:
+        with httpx.Client(timeout=20) as client:
+            health = client.get(f"{API_BASE}/health", headers=_bypass_headers()).json()
+        _health_data = health
+        _health_ok = True
+        llm_ok = health.get("llm_ready", False)
+        news_ok = health.get("news_ready", False)
+        st.success(f"API Online • Memory: {health.get('vector_store_count', 0)} entries")
+        if not llm_ok:
+            st.warning("⚠️ LLM not configured — OPENAI_API_KEY missing on backend")
+        if not news_ok:
+            st.warning("⚠️ News API not configured — NEWS_API_KEY missing on backend")
+    except Exception:
+        pass
     if not _health_ok:
-        st.error("API Offline")
+        st.error("API Offline — check Vercel deployment")
 
     st.divider()
     st.markdown("### 📜 Recent History")

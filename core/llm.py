@@ -93,8 +93,8 @@ def _get_client() -> AsyncOpenAI:
     if _client is None or _IS_SERVERLESS:
         settings = get_settings()
         # Shorter timeout + fewer retries on serverless to stay within
-        # Vercel / Lambda function time limits (typically 60 s).
-        timeout = 15.0 if _IS_SERVERLESS else 45.0
+        # Vercel / Lambda function time limits (maxDuration 60s).
+        timeout = 12.0 if _IS_SERVERLESS else 45.0
         retries = 1 if _IS_SERVERLESS else 3
         _client = AsyncOpenAI(
             api_key=settings.openai_api_key,

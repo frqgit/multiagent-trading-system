@@ -1,8 +1,28 @@
 # ============================================
 # AI Multi-Agent Trading System - Dependencies
-# (Streamlit Cloud reads this file automatically)
-# For Docker/full install, see requirements-docker.txt
+# Used by BOTH Streamlit Cloud and Vercel
 # ============================================
 
+# --- UI (Streamlit Cloud) ---
 streamlit>=1.41,<2
 httpx>=0.28,<1
+
+# --- Backend (Vercel / Docker) ---
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+pydantic>=2.10,<3
+pydantic[email]>=2.10,<3
+PyJWT>=2.8,<3
+bcrypt>=4.0,<5
+openai>=1.58,<2
+yfinance>=0.2.51,<1
+numpy>=1.26,<3
+beautifulsoup4>=4.12,<5
+lxml>=5.0,<6
+duckduckgo-search>=6.0,<8
+sqlalchemy[asyncio]>=2.0.36,<3
+asyncpg>=0.30,<1
+alembic>=1.14,<2
+pandas>=2.0,<3
+python-dotenv>=1.0,<2
+redis>=5.2,<6
