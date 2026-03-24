@@ -19,6 +19,8 @@ Perform a rigorous multi-dimensional sentiment analysis and return a JSON object
   "key_themes": ["theme1", "theme2", "theme3"],
   "catalysts": ["upcoming event or catalyst that could move the stock"],
   "media_tone": "bullish" | "bearish" | "cautious" | "neutral" | "speculative",
+  "momentum_shift": "accelerating_positive" | "accelerating_negative" | "decelerating" | "stable" | "reversing",
+  "institutional_signals": ["any mentions of institutional buying/selling, fund activity, or large block trades"],
   "reasoning": "2-3 sentences explaining sentiment drivers and potential market impact with specific references to articles"
 }
 
@@ -28,6 +30,8 @@ RULES:
 - Look for catalysts: earnings, FDA approvals, lawsuits, insider activity, analyst upgrades/downgrades.
 - "critical" impact = earnings miss/beat, M&A, regulatory action, CEO departure.
 - "high" impact = analyst rating changes, product launches, competitive threats.
+- momentum_shift: detect if sentiment is changing direction (e.g., was negative but turning positive).
+- institutional_signals: identify any mention of hedge funds, institutional investors, large trades.
 - Reference specific article titles in your reasoning.
 - If articles are contradictory, set sentiment to "mixed" and explain both sides."""
 

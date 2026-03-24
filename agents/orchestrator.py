@@ -18,6 +18,7 @@ from agents.sentiment_agent import SentimentAgent
 from agents.risk_agent import RiskManagerAgent
 from agents.decision_agent import DecisionAgent
 from agents.research_agent import ResearchAgent
+from agents.global_market_agent import GlobalMarketAdvisorAgent
 from core.llm import llm_json, llm_chat, start_tracking
 from tools.web_tools import web_search, web_fetch
 
@@ -28,7 +29,7 @@ _ROUTER_SYSTEM = """You are a financial query router. Given a user message, clas
 
 Return JSON:
 {
-  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query",
+  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook",
   "symbols": ["AAPL"],
   "query": "the original question rephrased for clarity",
   "exchange_hint": "ASX" | "NYSE" | "NASDAQ" | "LSE" | "" 
@@ -40,6 +41,7 @@ RULES:
 - "general_question": question about markets, sectors, economy, strategies — no specific stock required.
 - "comparison": user wants to compare two or more stocks.
 - "news_query": user wants latest news about a stock or topic.
+- "global_outlook": user asks about global markets, world economy, macro outlook, "what should I buy/sell", sector recommendations, or market conditions. Use this when the question is about the OVERALL market rather than a specific stock.
 - Extract ALL stock ticker symbols mentioned or implied. Map company names to tickers:
   "Commonwealth Bank" or "CBA" → "CBA.AX" (ASX)
   "Apple" → "AAPL", "Microsoft" → "MSFT", "Google" → "GOOGL", "Tesla" → "TSLA"
@@ -51,6 +53,7 @@ RULES:
 - If the user mentions a company name, resolve it to its ticker.
 - If user says "analyze" or "should I buy/sell", use "full_analysis".
 - If user says "price", "status", "how is", "what is", "current", "quote" — use "quick_status".
+- If user says "global", "world market", "macro", "economy", "what should I buy", "market outlook", "sector rotation", "best stocks", "market conditions" — use "global_outlook".
 - exchange_hint: if the stock is on a specific exchange (e.g. ASX, LSE), include it.
 - NEVER leave symbols empty if the user mentions ANY stock or company."""
 
@@ -82,6 +85,7 @@ class OrchestratorAgent:
         self.risk_agent = RiskManagerAgent()
         self.decision_agent = DecisionAgent()
         self.research_agent = ResearchAgent()
+        self.global_market_agent = GlobalMarketAdvisorAgent()
 
     # ── Public entry point ────────────────────────────────────────────────
     async def chat(self, user_message: str) -> dict[str, Any]:
@@ -112,7 +116,9 @@ class OrchestratorAgent:
                      self.name, intent, symbols, llm_available)
 
         # Step 2: Dispatch to the right handler
-        if intent == "quick_status" and symbols:
+        if intent == "global_outlook":
+            result = await self._handle_global_outlook(symbols, query)
+        elif intent == "quick_status" and symbols:
             result = await self._handle_quick_status(symbols, query)
         elif intent == "full_analysis" and symbols:
             result = await self._handle_full_analysis(symbols)
@@ -211,10 +217,34 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
 
     # ── Full analysis (existing heavy pipeline) ───────────────────────────
     async def _handle_full_analysis(self, symbols: list[str]) -> dict[str, Any]:
-        """Run the complete multi-agent analysis pipeline."""
-        results = await self.analyze_multiple(symbols)
+        """Run the complete multi-agent analysis pipeline with global macro overlay."""
+        import os
+        is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
-        # Build a summary
+        # Run stock-specific analysis and global macro analysis in parallel
+        global_timeout = 15.0 if is_serverless else 30.0
+        analysis_task = asyncio.create_task(self.analyze_multiple(symbols))
+
+        try:
+            global_task = asyncio.create_task(
+                self.global_market_agent.analyze(target_symbol=symbols[0] if symbols else None)
+            )
+            global_data = await asyncio.wait_for(asyncio.shield(global_task), timeout=global_timeout)
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] Global market analysis timed out or failed: %s", self.name, exc)
+            global_data = self.global_market_agent.empty_result(f"Global analysis unavailable: {exc}")
+
+        results = await analysis_task
+
+        # Enrich each result with global context
+        for r in results:
+            r["global_macro"] = global_data
+
+        # Build an enhanced summary
+        macro_bias = global_data.get("overall_bias", "neutral")
+        guidance = global_data.get("buy_sell_guidance", {})
+        action_bias = guidance.get("action_bias", "stay_selective")
+
         summaries = []
         for r in results:
             d = r.get("decision", {})
@@ -223,11 +253,142 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
                 f"(confidence {d.get('confidence', 0):.0%})"
             )
 
+        macro_line = f"\n\n**Global Macro Bias**: {macro_bias.replace('_', ' ').title()} — {action_bias.replace('_', ' ').title()}"
+        macro_summary = global_data.get("macro_summary", "")
+        if macro_summary:
+            macro_line += f"\n\n> {macro_summary}"
+
         return {
             "type": "full_analysis",
-            "answer": "## Analysis Complete\n\n" + " | ".join(summaries),
+            "answer": "## Analysis Complete\n\n" + " | ".join(summaries) + macro_line,
             "analyses": results,
+            "global_macro": global_data,
             "symbols": [r.get("symbol", "") for r in results],
+        }
+
+    # ── Global market outlook ─────────────────────────────────────────────
+    async def _handle_global_outlook(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Provide global market overview with sector recommendations and BUY/SELL advice."""
+        import os
+        is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+        global_timeout = 20.0 if is_serverless else 40.0
+
+        try:
+            global_data = await asyncio.wait_for(
+                self.global_market_agent.analyze(
+                    target_symbol=symbols[0] if symbols else None
+                ),
+                timeout=global_timeout,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.error("[%s] Global outlook failed: %s", self.name, exc)
+            global_data = self.global_market_agent.empty_result(f"Global analysis failed: {exc}")
+
+        # If the user also mentioned symbols, run quick market data for them alongside
+        stock_context = []
+        if symbols:
+            market_results = await asyncio.gather(
+                *[self.market_agent.analyze(s) for s in symbols[:5]],
+                return_exceptions=True,
+            )
+            for md in market_results:
+                if isinstance(md, Exception):
+                    continue
+                stock_context.append(md)
+
+        # Build the answer using LLM
+        guidance = global_data.get("buy_sell_guidance", {})
+        regime = global_data.get("global_regime", "unknown")
+        bias = global_data.get("overall_bias", "neutral")
+        macro_summary = global_data.get("macro_summary", "No data available.")
+        recommended = global_data.get("recommended_sectors", [])
+        avoid = global_data.get("avoid_sectors", [])
+        geo = global_data.get("geographic_outlook", {})
+        risks = global_data.get("key_macro_risks", [])
+        opportunities = global_data.get("key_macro_opportunities", [])
+        vix_assessment = global_data.get("vix_assessment", "unknown")
+        cycle_phase = global_data.get("market_cycle_phase", "uncertain")
+        cross_signals = global_data.get("cross_market_signals", {})
+
+        # Build a rich markdown overview
+        answer_parts = [
+            f"## 🌍 Global Market Outlook",
+            f"",
+            f"**Macro Regime:** {regime.replace('_', ' ').title()} | "
+            f"**Overall Bias:** {bias.replace('_', ' ').title()} | "
+            f"**Market Cycle:** {cycle_phase.replace('_', ' ').title()}",
+            f"",
+            f"**VIX Assessment:** {vix_assessment.replace('_', ' ').title()} (Level: {cross_signals.get('vix_level', 'N/A')})",
+            f"",
+            f"### Market Summary",
+            macro_summary,
+            f"",
+        ]
+
+        if recommended:
+            answer_parts.append(f"### ✅ Recommended Sectors")
+            answer_parts.append(", ".join(recommended))
+            answer_parts.append("")
+
+        if avoid:
+            answer_parts.append(f"### ⚠️ Sectors to Avoid")
+            answer_parts.append(", ".join(avoid))
+            answer_parts.append("")
+
+        # Geographic outlook
+        if any(v != "neutral" for v in geo.values()):
+            answer_parts.append("### 🗺️ Geographic Outlook")
+            for region, outlook in geo.items():
+                icon = "🟢" if outlook == "positive" else ("🔴" if outlook == "negative" else "⚪")
+                answer_parts.append(f"- {icon} **{region.upper()}**: {outlook.title()}")
+            answer_parts.append("")
+
+        # Actionable guidance
+        answer_parts.append("### 💡 BUY/SELL Guidance")
+        answer_parts.append(f"- **Action Bias:** {guidance.get('action_bias', 'stay_selective').replace('_', ' ').title()}")
+        answer_parts.append(f"- **Position Sizing:** {guidance.get('position_sizing', 'reduced').title()}")
+        answer_parts.append(f"- **Rationale:** {guidance.get('rationale', 'N/A')}")
+        answer_parts.append("")
+
+        if risks:
+            answer_parts.append("### ⛔ Key Macro Risks")
+            for r in risks:
+                answer_parts.append(f"- {r}")
+            answer_parts.append("")
+
+        if opportunities:
+            answer_parts.append("### 🚀 Key Opportunities")
+            for o in opportunities:
+                answer_parts.append(f"- {o}")
+            answer_parts.append("")
+
+        # If specific stocks were mentioned, add context
+        if stock_context:
+            answer_parts.append("### 📊 Referenced Stocks")
+            for md in stock_context:
+                if "error" in md and "price" not in md:
+                    continue
+                sym = md.get("symbol", "?")
+                price = md.get("price", "N/A")
+                change = md.get("price_change_pct", 0)
+                trend = md.get("trend", "N/A")
+                rsi = md.get("rsi", "N/A")
+                icon = "📈" if change >= 0 else "📉"
+                answer_parts.append(
+                    f"- {icon} **{md.get('company_name', sym)} ({sym})**: "
+                    f"${price} ({change:+.2f}%) | Trend: {trend} | RSI: {rsi}"
+                )
+            answer_parts.append("")
+
+        answer = "\n".join(answer_parts)
+
+        return {
+            "type": "global_outlook",
+            "answer": answer,
+            "global_macro": global_data,
+            "market_data": stock_context,
+            "symbols": symbols,
         }
 
     # ── Comparison ────────────────────────────────────────────────────────
@@ -411,8 +572,9 @@ Fetched Page Content:
         research_timeout = 10.0 if is_serverless else 25.0
         sentiment_timeout = 8.0 if is_serverless else 15.0
         decision_timeout = 10.0 if is_serverless else 20.0
+        global_macro_timeout = 12.0 if is_serverless else 25.0
 
-        # Phase 1: Market data + News in parallel (research is optional, use timeout)
+        # Phase 1: Market data + News + Research + Global Macro ALL in parallel
         market_task = asyncio.create_task(self.market_agent.analyze(symbol))
         news_task = asyncio.create_task(self.news_agent.analyze(symbol))
 
@@ -423,6 +585,16 @@ Fetched Page Content:
         except (asyncio.TimeoutError, Exception) as exc:
             logger.warning("[%s] Research timed out or failed for %s: %s", self.name, symbol, exc)
             research_data = self.research_agent._empty_result(symbol, f"Research unavailable: {exc}")
+
+        # Global macro runs in parallel with everything else
+        try:
+            global_task = asyncio.create_task(
+                self.global_market_agent.analyze(target_symbol=symbol)
+            )
+            global_data = await asyncio.wait_for(asyncio.shield(global_task), timeout=global_macro_timeout)
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] Global macro failed for %s: %s", self.name, symbol, exc)
+            global_data = self.global_market_agent.empty_result(f"Global analysis unavailable: {exc}")
 
         market_data = await market_task
         news_data = await news_task
@@ -451,9 +623,9 @@ Fetched Page Content:
                 "reasoning": f"Sentiment analysis unavailable: {exc}",
             }
 
-        # Phase 3: Risk assessment (depends on market + sentiment)
+        # Phase 3: Risk assessment (depends on market + sentiment + global macro)
         try:
-            risk_data = await self.risk_agent.analyze(market_data, sentiment_data)
+            risk_data = await self.risk_agent.analyze(market_data, sentiment_data, global_data)
         except Exception as exc:
             logger.warning("[%s] Risk assessment failed for %s: %s", self.name, symbol, exc)
             risk_data = {
@@ -466,10 +638,10 @@ Fetched Page Content:
                 "allow_sell": True,
             }
 
-        # Phase 4: Final decision (depends on all — including web research)
+        # Phase 4: Final decision (depends on all — including web research + global macro)
         try:
             decision = await asyncio.wait_for(
-                self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data),
+                self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data, global_data),
                 timeout=decision_timeout,
             )
         except (asyncio.TimeoutError, Exception) as exc:
@@ -493,6 +665,7 @@ Fetched Page Content:
             "sentiment": sentiment_data,
             "risk": risk_data,
             "research": research_data,
+            "global_macro": global_data,
             "elapsed_seconds": elapsed,
         }
 

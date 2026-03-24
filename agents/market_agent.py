@@ -103,6 +103,27 @@ class MarketAnalystAgent:
             position = (s.current_price - s.week52_low) / week52_range * 100
             signals.append(f"Trading at {position:.0f}% of 52-week range (${s.week52_low} – ${s.week52_high})")
 
+        # Price vs key moving averages (support/resistance)
+        if s.current_price > s.ma200:
+            signals.append(f"Price above MA200 (${s.ma200}) — long-term support intact")
+        else:
+            signals.append(f"Price below MA200 (${s.ma200}) — long-term support broken")
+
+        if s.current_price > s.ma50 and s.current_price < s.ma50 * 1.02:
+            signals.append(f"Price near MA50 support (${s.ma50}) — watch for bounce or breakdown")
+
+        # Trend strength indicator
+        if s.trend in ("strong_bullish",):
+            signals.append("Strong bullish alignment: Price > MA20 > MA50 > MA200")
+        elif s.trend in ("strong_bearish",):
+            signals.append("Strong bearish alignment: Price < MA20 < MA50 < MA200")
+
+        # Price-volume divergence
+        if s.avg_volume and s.volume > s.avg_volume * 2 and s.price_change_pct > 2:
+            signals.append("High-volume breakout — strong buying conviction")
+        elif s.avg_volume and s.volume > s.avg_volume * 2 and s.price_change_pct < -2:
+            signals.append("High-volume selloff — strong selling pressure")
+
         return {
             "symbol": s.symbol,
             "company_name": s.company_name,

@@ -74,6 +74,8 @@ class SentimentResponse(BaseModel):
     key_themes: list[str] = []
     catalysts: list[str] = []
     media_tone: str | None = None
+    momentum_shift: str | None = None
+    institutional_signals: list[str] = []
     reasoning: str | None = None
 
 
@@ -101,6 +103,9 @@ class ResearchResponse(BaseModel):
     insider_activity: str = "unknown"
     risks_from_research: list[str] = []
     opportunities_from_research: list[str] = []
+    institutional_ownership_trend: str = "unknown"
+    short_interest_signal: str = "unknown"
+    catalyst_timeline: list[str] = []
     research_summary: str = ""
     sources_searched: int = 0
     pages_analyzed: int = 0
@@ -116,6 +121,8 @@ class DecisionResponse(BaseModel):
     suggested_stop_loss: float | None = None
     target_price: float | None = None
     time_horizon: str | None = None
+    macro_alignment: str | None = None
+    position_size_recommendation: str | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -334,12 +341,16 @@ async def chat(req: ChatRequest, authorization: str = Header(None)):
                 "elapsed_seconds": r.get("elapsed_seconds", 0),
             })
         response["analyses"] = formatted
+        response["global_macro"] = result.get("global_macro", {})
     elif resp_type == "quick_status":
         response["market_data"] = result.get("market_data", [])
     elif resp_type == "comparison":
         response["market_data"] = result.get("market_data", [])
     elif resp_type == "news_query":
         response["articles"] = result.get("articles", [])
+    elif resp_type == "global_outlook":
+        response["global_macro"] = result.get("global_macro", {})
+        response["market_data"] = result.get("market_data", [])
     elif resp_type == "general_question":
         response["search_results"] = result.get("search_results", [])
 

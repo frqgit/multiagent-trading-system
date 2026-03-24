@@ -29,6 +29,9 @@ Synthesize the data into a structured JSON research brief:
   "insider_activity": "buying" | "selling" | "mixed" | "unknown",
   "risks_from_research": ["risk1", "risk2"],
   "opportunities_from_research": ["opportunity1", "opportunity2"],
+  "institutional_ownership_trend": "increasing" | "decreasing" | "stable" | "unknown",
+  "short_interest_signal": "high_short" | "moderate" | "low" | "unknown",
+  "catalyst_timeline": ["near-term catalyst description", "medium-term catalyst description"],
   "research_summary": "2-3 sentence summary of the most important findings from web research"
 }
 
@@ -36,6 +39,9 @@ RULES:
 - Only include data you can actually find in the provided research. Use "unknown" / null when data is absent.
 - Extract specific numbers (price targets, revenue figures) when mentioned in the text.
 - Focus on the most recent and material information.
+- institutional_ownership_trend: detect if institutional investors are increasing or decreasing positions.
+- short_interest_signal: note if there are mentions of short interest, short squeeze potential.
+- catalyst_timeline: identify upcoming corporate events (earnings dates, product launches, FDA decisions) that could move the stock.
 - Be concise but specific. Reference actual sources when possible.
 - Do NOT make up numbers or ratings that aren't in the research data."""
 

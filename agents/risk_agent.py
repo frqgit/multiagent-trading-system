@@ -19,7 +19,7 @@ class RiskManagerAgent:
     HIGH_BETA_THRESHOLD = 1.5
     MAX_RISK_SCORE = 10
 
-    async def analyze(self, market_data: dict[str, Any], sentiment_data: dict[str, Any]) -> dict[str, Any]:
+    async def analyze(self, market_data: dict[str, Any], sentiment_data: dict[str, Any], global_macro: dict[str, Any] | None = None) -> dict[str, Any]:
         symbol = market_data.get("symbol", "UNKNOWN")
         logger.info("[%s] Evaluating risk for %s", self.name, symbol)
 
@@ -119,6 +119,53 @@ class RiskManagerAgent:
             elif pe < 0:
                 risk_score += 1
                 warnings.append(f"Negative P/E ({pe:.1f}): company not profitable")
+
+        # --- Global macro risk overlay ---
+        if global_macro and global_macro.get("global_regime") != "unknown":
+            regime = global_macro.get("global_regime", "mixed")
+            vix_assessment = global_macro.get("vix_assessment", "moderate_caution")
+            guidance = global_macro.get("buy_sell_guidance", {})
+            action_bias = guidance.get("action_bias", "stay_selective")
+            macro_risks = global_macro.get("key_macro_risks", [])
+            cross_signals = global_macro.get("cross_market_signals", {})
+
+            # Risk-off regime increases risk
+            if regime == "risk_off":
+                risk_score += 2
+                warnings.append("Global regime is risk-off — macro headwinds for equities")
+                constraints.append("Risk-off environment: reduce long exposure")
+            elif regime == "transitioning":
+                risk_score += 1
+                warnings.append("Global regime is transitioning — increased uncertainty")
+
+            # VIX elevated or panic
+            if vix_assessment in ("elevated_fear", "extreme_panic"):
+                risk_score += 1
+                vix_level = cross_signals.get("vix_level", "N/A")
+                warnings.append(f"VIX at {vix_level} — {vix_assessment.replace('_', ' ')}")
+                if vix_assessment == "extreme_panic":
+                    constraints.append("Extreme VIX: avoid new positions until volatility subsides")
+
+            # Macro guidance says raise cash or favor selling
+            if action_bias in ("favor_selling", "raise_cash"):
+                risk_score += 1
+                warnings.append(f"Global macro guidance: {action_bias.replace('_', ' ')}")
+                constraints.append("Macro environment favors caution — consider reducing positions")
+
+            # Safe haven demand is high
+            if cross_signals.get("safe_haven_demand") == "high":
+                risk_score += 1
+                warnings.append("High safe-haven demand (gold + VIX rising) — flight to safety underway")
+
+            # Weak global breadth
+            breadth_label = cross_signals.get("global_breadth_label", "")
+            if breadth_label in ("broad_decline", "narrow_participation"):
+                risk_score += 1
+                warnings.append(f"Global market breadth: {breadth_label.replace('_', ' ')}")
+
+            # Append top macro risks
+            for mr in macro_risks[:2]:
+                warnings.append(f"Macro risk: {mr}")
 
         risk_score = min(risk_score, self.MAX_RISK_SCORE)
         risk_level = "low" if risk_score <= 3 else ("medium" if risk_score <= 6 else "high")

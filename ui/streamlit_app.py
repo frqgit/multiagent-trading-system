@@ -312,6 +312,64 @@ def _fmt_large(n) -> str:
     return f"${n:,.0f}"
 
 
+def _render_global_macro_card(macro: dict):
+    """Render a compact global macro overview card."""
+    regime = macro.get("global_regime", "unknown").replace("_", " ").title()
+    bias = macro.get("overall_bias", "neutral").replace("_", " ").title()
+    cycle = macro.get("market_cycle_phase", "uncertain").replace("_", " ").title()
+    vix_assessment = macro.get("vix_assessment", "unknown").replace("_", " ").title()
+    cross = macro.get("cross_market_signals", {})
+    vix_level = cross.get("vix_level", "N/A")
+    guidance = macro.get("buy_sell_guidance", {})
+    action_bias = guidance.get("action_bias", "stay_selective").replace("_", " ").title()
+    sizing = guidance.get("position_sizing", "reduced").title()
+    recommended = macro.get("recommended_sectors", [])
+    avoid = macro.get("avoid_sectors", [])
+
+    # Color coding
+    bias_color = "#22c55e" if "bullish" in bias.lower() else ("#ef4444" if "bearish" in bias.lower() else "#f59e0b")
+    regime_color = "#22c55e" if regime.lower() == "risk on" else ("#ef4444" if regime.lower() == "risk off" else "#f59e0b")
+
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #334155;border-radius:12px;padding:20px;margin:16px 0;">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+            <span style="font-size:1.3em;margin-right:8px;">🌍</span>
+            <span style="font-size:1.1em;font-weight:700;color:#e2e8f0;">Global Macro Overlay</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px;">
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">Regime</div>
+                <div style="color:{regime_color};font-weight:700;">{regime}</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">Bias</div>
+                <div style="color:{bias_color};font-weight:700;">{bias}</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">VIX</div>
+                <div style="color:#e2e8f0;font-weight:700;">{vix_level} ({vix_assessment})</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">Cycle</div>
+                <div style="color:#e2e8f0;font-weight:700;">{cycle}</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">Action Bias</div>
+                <div style="color:#60a5fa;font-weight:700;">{action_bias}</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#94a3b8;font-size:0.75em;">Position Sizing</div>
+                <div style="color:#60a5fa;font-weight:700;">{sizing}</div>
+            </div>
+        </div>
+        {"<div style='margin-top:12px;'><span style=\"color:#94a3b8;font-size:0.75em;\">Recommended: </span><span style=\"color:#22c55e;font-size:0.85em;\">" + ', '.join(recommended) + "</span></div>" if recommended else ""}
+        {"<div><span style='color:#94a3b8;font-size:0.75em;'>Avoid: </span><span style='color:#ef4444;font-size:0.85em;'>" + ', '.join(avoid) + "</span></div>" if avoid else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def _render_analysis(r: dict):
     """Render a full professional analysis dashboard for one symbol."""
     decision = r.get("decision", {})
@@ -1071,10 +1129,47 @@ else:
                         sym = r.get("symbol", "?")
                         summaries.append(f"**{sym}**: {action} ({conf:.0%})")
                     summary_text = " | ".join(summaries)
+
+                    # Show global macro overlay if available
+                    if "global_macro" in response and response["global_macro"].get("global_regime") != "unknown":
+                        _render_global_macro_card(response["global_macro"])
+
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": json.dumps(response["analyses"]),
                         "summary": f"📊 {summary_text}",
+                    })
+
+                # For global outlook, show macro dashboard
+                elif resp_type == "global_outlook" and "global_macro" in response:
+                    _render_global_macro_card(response["global_macro"])
+
+                    # Also show any referenced stock cards
+                    for md in response.get("market_data", []):
+                        if isinstance(md, dict) and "price" in md:
+                            sym = md.get("symbol", "?")
+                            change = md.get("price_change_pct", 0)
+                            change_color = "metric-green" if change and change >= 0 else "metric-red"
+                            cols = st.columns(5)
+                            card_data = [
+                                ("Price", f"${_fmt_number(md.get('price'))}", change_color),
+                                ("Change", _fmt_pct(change), change_color),
+                                ("RSI", _fmt_number(md.get('rsi'), 1), "metric-yellow" if md.get('rsi') and (md['rsi'] > 70 or md['rsi'] < 30) else "metric-white"),
+                                ("Trend", md.get('trend', 'N/A').replace('_', ' ').title(), "metric-blue"),
+                                ("Market Cap", md.get('market_cap_formatted', 'N/A'), "metric-white"),
+                            ]
+                            for col, (label, value, color) in zip(cols, card_data):
+                                col.markdown(f"""
+                                <div class="metric-card">
+                                    <div class="metric-label">{label}</div>
+                                    <div class="metric-value {color}">{value}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "summary": f"🌍 {answer[:200]}" if answer else "Global outlook",
                     })
 
                 # For quick_status with market data, show compact cards
