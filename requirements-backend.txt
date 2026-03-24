@@ -1,0 +1,42 @@
+# ============================================
+# AI Multi-Agent Trading System - Backend (Vercel)
+# ============================================
+
+# Web Framework
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+pydantic>=2.10,<3
+pydantic[email]>=2.10,<3
+
+# Auth
+PyJWT>=2.8,<3
+bcrypt>=4.0,<5
+
+# Async HTTP
+httpx>=0.28,<1
+
+# LLM
+openai>=1.58,<2
+
+# Stock Data
+yfinance>=0.2.51,<1
+numpy>=1.26,<3
+
+# Web Crawling (web_search + web_fetch)
+beautifulsoup4>=4.12,<5
+lxml>=5.0,<6
+duckduckgo-search>=6.0,<8
+
+# Database
+sqlalchemy[asyncio]>=2.0.36,<3
+asyncpg>=0.30,<1
+alembic>=1.14,<2
+
+# Data
+pandas>=2.0,<3
+
+# Config
+python-dotenv>=1.0,<2
+
+# Redis (optional, for distributed caching)
+redis>=5.2,<6
