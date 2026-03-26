@@ -78,6 +78,7 @@ class PortfolioOptimizationAgent:
         optimization_goal: str = "max_sharpe",
         analyst_views: dict[str, float] | None = None,
         lookback_days: int = 252,
+        risk_free_rate: float | None = None,
     ) -> dict[str, Any]:
         """
         Analyze and optimize a portfolio.
@@ -94,6 +95,9 @@ class PortfolioOptimizationAgent:
             Optimized portfolio weights and metrics
         """
         logger.info("[%s] Optimizing portfolio for %s symbols", self.name, len(symbols))
+        
+        # Use provided risk-free rate or default
+        rf_rate = risk_free_rate if risk_free_rate is not None else self.RISK_FREE_RATE
         
         if len(symbols) < 2:
             return {"error": "Portfolio optimization requires at least 2 symbols", "symbols": symbols}

@@ -81,7 +81,7 @@ class PortfolioResponse(BaseModel):
     optimization: dict
     current_metrics: dict
     correlation_matrix: dict
-    rebalancing: dict
+    rebalancing: list
 
 
 class BacktestRequest(BaseModel):
@@ -93,9 +93,7 @@ class BacktestRequest(BaseModel):
 class BacktestResponse(BaseModel):
     symbol: str
     strategy: str
-    performance: dict
-    metrics: dict
-    trades: list[dict]
+    results: dict
 
 
 class VolatilityRequest(BaseModel):
@@ -107,9 +105,9 @@ class VolatilityResponse(BaseModel):
     symbol: str
     volatility_estimates: dict
     regime: dict
-    forecast: dict
+    forecast: list
     risk_assessment: dict
-    term_structure: list[dict]
+    term_structure: dict
 
 
 class TechnicalRequest(BaseModel):
@@ -121,7 +119,7 @@ class TechnicalResponse(BaseModel):
     symbol: str
     trend_analysis: dict
     indicators: dict
-    signals: dict
+    signals: list
     patterns: list[dict]
     support_resistance: dict
     fibonacci: dict
@@ -232,7 +230,6 @@ async def optimize_portfolio(req: PortfolioRequest):
         result = await _agents["portfolio"].analyze(
             symbols=req.symbols,
             current_weights=req.target_weights,
-            risk_free_rate=req.risk_free_rate,
         )
         
         if "error" in result:
@@ -240,10 +237,10 @@ async def optimize_portfolio(req: PortfolioRequest):
         
         return PortfolioResponse(
             symbols=req.symbols,
-            optimization=result.get("optimization", {}),
-            current_metrics=result.get("current_metrics", {}),
-            correlation_matrix=result.get("correlation_matrix", {}),
-            rebalancing=result.get("rebalancing", {}),
+            optimization=result.get("optimal_weights", {}),
+            current_metrics=result.get("portfolio_metrics", {}),
+            correlation_matrix=result.get("correlations", {}),
+            rebalancing=result.get("rebalance_trades", []),
         )
     except Exception as e:
         logger.exception("Portfolio optimization failed")
@@ -269,7 +266,6 @@ async def run_backtest(req: BacktestRequest):
         result = await _agents["backtest"].backtest_strategy(
             symbol=req.symbol,
             strategy=req.strategy,
-            days=req.days,
         )
         
         if "error" in result:
@@ -278,9 +274,7 @@ async def run_backtest(req: BacktestRequest):
         return BacktestResponse(
             symbol=req.symbol,
             strategy=req.strategy,
-            performance=result.get("performance", {}),
-            metrics=result.get("metrics", {}),
-            trades=result.get("trades", [])[:50],  # Limit returned trades
+            results=result,
         )
     except Exception as e:
         logger.exception("Backtest failed")
@@ -297,8 +291,7 @@ async def run_monte_carlo(req: BacktestRequest, simulations: int = 100):
         result = await _agents["backtest"].monte_carlo_simulation(
             symbol=req.symbol,
             strategy=req.strategy,
-            days=req.days,
-            n_simulations=min(simulations, 500),
+            num_simulations=min(simulations, 500),
         )
         
         if "error" in result:
@@ -319,7 +312,7 @@ async def analyze_volatility(req: VolatilityRequest):
     try:
         result = await _agents["volatility"].analyze(
             symbol=req.symbol,
-            days=req.days,
+            lookback_days=req.days,
         )
         
         if "error" in result:
@@ -327,7 +320,7 @@ async def analyze_volatility(req: VolatilityRequest):
         
         return VolatilityResponse(
             symbol=req.symbol,
-            volatility_estimates=result.get("volatility_estimates", {}),
+            volatility_estimates=result.get("volatility_measures", {}),
             regime=result.get("regime", {}),
             forecast=result.get("forecast", {}),
             risk_assessment=result.get("risk_assessment", {}),
@@ -347,7 +340,6 @@ async def analyze_technical(req: TechnicalRequest):
     try:
         result = await _agents["technical"].analyze(
             symbol=req.symbol,
-            days=req.days,
         )
         
         if "error" in result:
@@ -376,7 +368,7 @@ async def analyze_correlation(req: CorrelationRequest):
     try:
         result = await _agents["correlation"].analyze_correlations(
             symbols=req.symbols,
-            days=req.days,
+            lookback_days=req.days,
         )
         
         if "error" in result:
@@ -385,8 +377,8 @@ async def analyze_correlation(req: CorrelationRequest):
         return CorrelationResponse(
             symbols=req.symbols,
             correlation_matrix=result.get("correlation_matrix", {}),
-            top_pairs=result.get("top_pairs", []),
-            cointegration=result.get("cointegration_tests", []),
+            top_pairs=result.get("highest_correlations", []),
+            cointegration=result.get("pair_trading_opportunities", []),
             diversification_metrics=result.get("diversification_metrics", {}),
             betas=result.get("betas", {}),
         )
@@ -405,20 +397,20 @@ async def analyze_pair(req: PairAnalysisRequest):
         result = await _agents["correlation"].analyze_pair(
             symbol1=req.symbol1,
             symbol2=req.symbol2,
-            days=req.days,
+            lookback_days=req.days,
         )
         
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
         
         return PairAnalysisResponse(
-            pair=result.get("pair", f"{req.symbol1}/{req.symbol2}"),
-            correlation=result.get("correlation", 0),
-            cointegrated=result.get("cointegrated", False),
-            half_life=result.get("half_life"),
-            spread_zscore=result.get("spread_zscore", 0),
-            trading_signal=result.get("trading_signal", {}),
-            hedge_ratio=result.get("hedge_ratio", 1),
+            pair=f"{req.symbol1}/{req.symbol2}",
+            correlation=result.get("correlation", {}).get("full_period", 0),
+            cointegrated=result.get("cointegration", {}).get("is_cointegrated", False),
+            half_life=result.get("spread_analysis", {}).get("half_life_days"),
+            spread_zscore=result.get("spread_analysis", {}).get("z_score", 0),
+            trading_signal=result.get("pair_trade", {}),
+            hedge_ratio=result.get("cointegration", {}).get("hedge_ratio", 1),
         )
     except Exception as e:
         logger.exception("Pair analysis failed")
@@ -433,10 +425,12 @@ async def adaptive_analysis(req: AdaptiveAnalysisRequest):
     _require_agents()
     try:
         # Get price data first
-        from tools.stock_api import get_stock_history
-        price_data = await get_stock_history(req.symbol, days=req.days)
+        import asyncio
+        from tools.stock_api import fetch_stock_data
+        snapshot = await asyncio.to_thread(fetch_stock_data, req.symbol)
+        price_data = snapshot.price_history_30d
         
-        if not price_data or len(price_data) < 50:
+        if not price_data or len(price_data) < 20:
             raise HTTPException(status_code=400, detail="Insufficient price data")
         
         result = await _agents["adaptive"].analyze(
@@ -476,8 +470,10 @@ async def submit_order(req: OrderRequest):
     _require_agents()
     try:
         # Get current price for market orders
-        from tools.stock_api import get_stock_price
-        current_price = await get_stock_price(req.symbol)
+        import asyncio
+        from tools.stock_api import fetch_stock_data
+        snapshot = await asyncio.to_thread(fetch_stock_data, req.symbol)
+        current_price = snapshot.current_price
         
         if current_price is None:
             raise HTTPException(status_code=400, detail=f"Could not get price for {req.symbol}")
@@ -518,12 +514,15 @@ async def get_portfolio(symbols: str = ""):
     try:
         current_prices = {}
         if symbols:
-            from tools.stock_api import get_stock_price
+            import asyncio
+            from tools.stock_api import fetch_stock_data
             symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
             for sym in symbol_list:
-                price = await get_stock_price(sym)
-                if price:
-                    current_prices[sym] = price
+                try:
+                    snapshot = await asyncio.to_thread(fetch_stock_data, sym)
+                    current_prices[sym] = snapshot.current_price
+                except Exception:
+                    pass
         
         result = await _agents["execution"].get_portfolio_summary(current_prices or None)
         
