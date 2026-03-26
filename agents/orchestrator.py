@@ -3,6 +3,15 @@
 Supports OpenClaw-style natural language: the LLM-based router understands
 any financial query (quick status, deep analysis, comparisons, general
 questions) and dispatches to the appropriate pipeline.
+
+Enhanced with:
+- Portfolio optimization
+- Backtesting
+- Volatility modeling
+- Technical strategy analysis
+- Correlation analysis
+- Adaptive learning
+- Paper trading execution
 """
 
 from __future__ import annotations
@@ -19,6 +28,14 @@ from agents.risk_agent import RiskManagerAgent
 from agents.decision_agent import DecisionAgent
 from agents.research_agent import ResearchAgent
 from agents.global_market_agent import GlobalMarketAdvisorAgent
+# New advanced agents
+from agents.portfolio_agent import PortfolioOptimizationAgent
+from agents.backtest_agent import BacktestingAgent
+from agents.volatility_agent import VolatilityModelingAgent
+from agents.technical_strategy_agent import TechnicalStrategyAgent
+from agents.correlation_agent import CorrelationAnalysisAgent
+from agents.adaptive_agent import AdaptiveLearningAgent
+from agents.execution_agent import ExecutionAgent
 from core.llm import llm_json, llm_chat, start_tracking
 from tools.web_tools import web_search, web_fetch
 
@@ -29,7 +46,7 @@ _ROUTER_SYSTEM = """You are a financial query router. Given a user message, clas
 
 Return JSON:
 {
-  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook",
+  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook" | "portfolio_optimization" | "backtest" | "volatility_analysis" | "technical_analysis" | "correlation_analysis" | "execution",
   "symbols": ["AAPL"],
   "query": "the original question rephrased for clarity",
   "exchange_hint": "ASX" | "NYSE" | "NASDAQ" | "LSE" | "" 
@@ -37,11 +54,17 @@ Return JSON:
 
 RULES:
 - "quick_status": user wants current price / status / quick overview of a stock.
-- "full_analysis": user explicitly asks for deep analysis, BUY/SELL recommendation, or technical analysis.
+- "full_analysis": user explicitly asks for deep analysis, BUY/SELL recommendation.
 - "general_question": question about markets, sectors, economy, strategies — no specific stock required.
 - "comparison": user wants to compare two or more stocks.
 - "news_query": user wants latest news about a stock or topic.
-- "global_outlook": user asks about global markets, world economy, macro outlook, "what should I buy/sell", sector recommendations, or market conditions. Use this when the question is about the OVERALL market rather than a specific stock.
+- "global_outlook": user asks about global markets, world economy, macro outlook, "what should I buy/sell", sector recommendations, or market conditions.
+- "portfolio_optimization": user wants to optimize a portfolio, efficient frontier, risk parity, position sizing, rebalancing, or asset allocation.
+- "backtest": user wants to backtest a strategy, test historical performance, run Monte Carlo simulation, or walk-forward analysis.
+- "volatility_analysis": user asks about volatility, VIX, GARCH, volatility forecast, regime detection, or risk metrics.
+- "technical_analysis": user wants technical analysis, chart patterns, indicators (RSI, MACD, Bollinger), Ichimoku, support/resistance, Fibonacci.
+- "correlation_analysis": user asks about correlation, cointegration, pair trading, beta, or diversification analysis.
+- "execution": user wants to place a trade, check portfolio, view positions, order status, or paper trade.
 - Extract ALL stock ticker symbols mentioned or implied. Map company names to tickers:
   "Commonwealth Bank" or "CBA" → "CBA.AX" (ASX)
   "Apple" → "AAPL", "Microsoft" → "MSFT", "Google" → "GOOGL", "Tesla" → "TSLA"
@@ -54,6 +77,12 @@ RULES:
 - If user says "analyze" or "should I buy/sell", use "full_analysis".
 - If user says "price", "status", "how is", "what is", "current", "quote" — use "quick_status".
 - If user says "global", "world market", "macro", "economy", "what should I buy", "market outlook", "sector rotation", "best stocks", "market conditions" — use "global_outlook".
+- If user says "optimize", "allocation", "efficient frontier", "risk parity", "rebalance", "portfolio weights" — use "portfolio_optimization".
+- If user says "backtest", "historical", "monte carlo", "walk forward", "test strategy", "performance test" — use "backtest".
+- If user says "volatility", "GARCH", "VIX", "vol forecast", "regime" — use "volatility_analysis".
+- If user says "technical", "chart", "pattern", "RSI", "MACD", "Bollinger", "Ichimoku", "support", "resistance", "Fibonacci" — use "technical_analysis".
+- If user says "correlation", "cointegration", "pair trade", "beta", "diversification" — use "correlation_analysis".
+- If user says "trade", "buy", "sell", "order", "portfolio", "position", "execute", "paper" — use "execution".
 - exchange_hint: if the stock is on a specific exchange (e.g. ASX, LSE), include it.
 - NEVER leave symbols empty if the user mentions ANY stock or company."""
 
@@ -74,11 +103,21 @@ class OrchestratorAgent:
     1. Uses LLM to understand any natural language query (intent + symbols)
     2. Routes to the appropriate handler (quick status, full analysis, Q&A, etc.)
     3. Returns a flexible response with both text and structured data
+    
+    Enhanced capabilities:
+    - Portfolio optimization with Markowitz, Black-Litterman, Risk Parity
+    - Backtesting with walk-forward and Monte Carlo simulation
+    - Volatility modeling with GARCH and regime detection
+    - Technical analysis with multiple strategies and pattern recognition
+    - Correlation analysis with pair trading signals
+    - Adaptive learning with regime-based strategy selection
+    - Paper trading execution with position management
     """
 
     name = "OrchestratorAgent"
 
     def __init__(self) -> None:
+        # Core agents
         self.market_agent = MarketAnalystAgent()
         self.news_agent = NewsAnalystAgent()
         self.sentiment_agent = SentimentAgent()
@@ -86,6 +125,15 @@ class OrchestratorAgent:
         self.decision_agent = DecisionAgent()
         self.research_agent = ResearchAgent()
         self.global_market_agent = GlobalMarketAdvisorAgent()
+        
+        # Advanced agents
+        self.portfolio_agent = PortfolioOptimizationAgent()
+        self.backtest_agent = BacktestingAgent()
+        self.volatility_agent = VolatilityModelingAgent()
+        self.technical_agent = TechnicalStrategyAgent()
+        self.correlation_agent = CorrelationAnalysisAgent()
+        self.adaptive_agent = AdaptiveLearningAgent()
+        self.execution_agent = ExecutionAgent()
 
     # ── Public entry point ────────────────────────────────────────────────
     async def chat(self, user_message: str) -> dict[str, Any]:
@@ -118,6 +166,18 @@ class OrchestratorAgent:
         # Step 2: Dispatch to the right handler
         if intent == "global_outlook":
             result = await self._handle_global_outlook(symbols, query)
+        elif intent == "portfolio_optimization" and symbols:
+            result = await self._handle_portfolio_optimization(symbols, query)
+        elif intent == "backtest" and symbols:
+            result = await self._handle_backtest(symbols, query)
+        elif intent == "volatility_analysis" and symbols:
+            result = await self._handle_volatility_analysis(symbols, query)
+        elif intent == "technical_analysis" and symbols:
+            result = await self._handle_technical_analysis(symbols, query)
+        elif intent == "correlation_analysis" and len(symbols) >= 2:
+            result = await self._handle_correlation_analysis(symbols, query)
+        elif intent == "execution":
+            result = await self._handle_execution(symbols, query)
         elif intent == "quick_status" and symbols:
             result = await self._handle_quick_status(symbols, query)
         elif intent == "full_analysis" and symbols:
@@ -556,6 +616,400 @@ Fetched Page Content:
             "answer": answer,
             "search_results": search_results,
             "symbols": [],
+        }
+
+    # ── Portfolio Optimization Handler ────────────────────────────────────
+    async def _handle_portfolio_optimization(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Optimize portfolio allocation using Modern Portfolio Theory."""
+        logger.info("[%s] Portfolio optimization for %s", self.name, symbols)
+        
+        try:
+            result = await self.portfolio_agent.analyze(symbols)
+        except Exception as exc:
+            logger.error("[%s] Portfolio optimization failed: %s", self.name, exc)
+            return {
+                "type": "portfolio_optimization",
+                "answer": f"⚠️ Portfolio optimization failed: {exc}",
+                "symbols": symbols,
+            }
+        
+        # Build answer
+        opt = result.get("optimization", {})
+        metrics = result.get("current_metrics", {})
+        
+        answer_parts = [
+            "## 📊 Portfolio Optimization Results",
+            "",
+            f"**Symbols:** {', '.join(symbols)}",
+            "",
+            "### Optimal Weights",
+        ]
+        
+        for strategy in ["max_sharpe", "min_variance", "risk_parity"]:
+            weights = opt.get(f"{strategy}_weights", {})
+            if weights:
+                answer_parts.append(f"\n**{strategy.replace('_', ' ').title()}:**")
+                for sym, w in weights.items():
+                    answer_parts.append(f"- {sym}: {w*100:.1f}%")
+        
+        if metrics:
+            answer_parts.append("\n### Portfolio Metrics")
+            answer_parts.append(f"- **Expected Return:** {metrics.get('expected_return', 0)*100:.2f}%")
+            answer_parts.append(f"- **Volatility:** {metrics.get('volatility', 0)*100:.2f}%")
+            answer_parts.append(f"- **Sharpe Ratio:** {metrics.get('sharpe_ratio', 0):.2f}")
+        
+        rebal = result.get("rebalancing", {})
+        if rebal.get("needs_rebalancing"):
+            answer_parts.append("\n### Rebalancing Recommendations")
+            for rec in rebal.get("recommendations", [])[:5]:
+                answer_parts.append(f"- {rec}")
+        
+        return {
+            "type": "portfolio_optimization",
+            "answer": "\n".join(answer_parts),
+            "optimization": result,
+            "symbols": symbols,
+        }
+
+    # ── Backtesting Handler ───────────────────────────────────────────────
+    async def _handle_backtest(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Run backtesting on historical data."""
+        logger.info("[%s] Backtesting for %s", self.name, symbols)
+        
+        symbol = symbols[0]  # Backtest single symbol
+        
+        # Determine strategy from query
+        strategy = "ma_crossover"  # default
+        query_lower = query.lower()
+        if "rsi" in query_lower or "mean reversion" in query_lower:
+            strategy = "rsi_mean_reversion"
+        elif "momentum" in query_lower:
+            strategy = "momentum"
+        elif "breakout" in query_lower:
+            strategy = "breakout"
+        elif "macd" in query_lower:
+            strategy = "macd"
+        elif "bollinger" in query_lower:
+            strategy = "bollinger"
+        
+        try:
+            result = await self.backtest_agent.backtest_strategy(symbol, strategy)
+        except Exception as exc:
+            logger.error("[%s] Backtest failed: %s", self.name, exc)
+            return {
+                "type": "backtest",
+                "answer": f"⚠️ Backtest failed: {exc}",
+                "symbols": symbols,
+            }
+        
+        perf = result.get("performance", {})
+        metrics = result.get("metrics", {})
+        
+        answer_parts = [
+            f"## 📈 Backtest Results: {strategy.replace('_', ' ').title()}",
+            f"",
+            f"**Symbol:** {symbol}",
+            f"",
+            "### Performance Summary",
+            f"- **Total Return:** {perf.get('total_return', 0)*100:.2f}%",
+            f"- **Annualized Return:** {perf.get('annualized_return', 0)*100:.2f}%",
+            f"- **Sharpe Ratio:** {perf.get('sharpe_ratio', 0):.2f}",
+            f"- **Max Drawdown:** {perf.get('max_drawdown', 0)*100:.2f}%",
+            f"",
+            "### Trade Statistics",
+            f"- **Total Trades:** {metrics.get('total_trades', 0)}",
+            f"- **Win Rate:** {metrics.get('win_rate', 0)*100:.1f}%",
+            f"- **Profit Factor:** {metrics.get('profit_factor', 0):.2f}",
+            f"- **Avg Trade Return:** {metrics.get('avg_trade_return', 0)*100:.2f}%",
+        ]
+        
+        return {
+            "type": "backtest",
+            "answer": "\n".join(answer_parts),
+            "backtest_results": result,
+            "symbols": symbols,
+        }
+
+    # ── Volatility Analysis Handler ───────────────────────────────────────
+    async def _handle_volatility_analysis(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Analyze volatility with multiple models."""
+        logger.info("[%s] Volatility analysis for %s", self.name, symbols)
+        
+        symbol = symbols[0]
+        
+        try:
+            result = await self.volatility_agent.analyze(symbol)
+        except Exception as exc:
+            logger.error("[%s] Volatility analysis failed: %s", self.name, exc)
+            return {
+                "type": "volatility_analysis",
+                "answer": f"⚠️ Volatility analysis failed: {exc}",
+                "symbols": symbols,
+            }
+        
+        vol = result.get("volatility_estimates", {})
+        regime = result.get("regime", {})
+        forecast = result.get("forecast", {})
+        
+        answer_parts = [
+            f"## 📊 Volatility Analysis: {symbol}",
+            f"",
+            "### Current Volatility Estimates (Annualized)",
+            f"- **Historical (20-day):** {vol.get('historical_20d', 0)*100:.2f}%",
+            f"- **EWMA:** {vol.get('ewma', 0)*100:.2f}%",
+            f"- **Parkinson (High-Low):** {vol.get('parkinson', 0)*100:.2f}%",
+            f"- **GARCH(1,1):** {vol.get('garch', 0)*100:.2f}%",
+            f"",
+            "### Volatility Regime",
+            f"- **Current Regime:** {regime.get('current', 'Unknown').title()}",
+            f"- **Trend:** {regime.get('trend', 'stable').title()}",
+            f"",
+            "### Forecast",
+            f"- **Next Day Vol:** {forecast.get('next_day', 0)*100:.2f}%",
+            f"- **Next Week Vol:** {forecast.get('next_week', 0)*100:.2f}%",
+        ]
+        
+        risk = result.get("risk_assessment", {})
+        if risk:
+            answer_parts.append("")
+            answer_parts.append("### Risk Assessment")
+            answer_parts.append(f"- **VaR (95%):** {risk.get('var_95', 0)*100:.2f}%")
+            answer_parts.append(f"- **CVaR (95%):** {risk.get('cvar_95', 0)*100:.2f}%")
+        
+        return {
+            "type": "volatility_analysis",
+            "answer": "\n".join(answer_parts),
+            "volatility_data": result,
+            "symbols": symbols,
+        }
+
+    # ── Technical Analysis Handler ────────────────────────────────────────
+    async def _handle_technical_analysis(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Run comprehensive technical analysis."""
+        logger.info("[%s] Technical analysis for %s", self.name, symbols)
+        
+        symbol = symbols[0]
+        
+        try:
+            result = await self.technical_agent.analyze(symbol)
+        except Exception as exc:
+            logger.error("[%s] Technical analysis failed: %s", self.name, exc)
+            return {
+                "type": "technical_analysis",
+                "answer": f"⚠️ Technical analysis failed: {exc}",
+                "symbols": symbols,
+            }
+        
+        trend = result.get("trend_analysis", {})
+        indicators = result.get("indicators", {})
+        signals = result.get("signals", {})
+        patterns = result.get("patterns", [])
+        
+        answer_parts = [
+            f"## 📈 Technical Analysis: {symbol}",
+            f"",
+            "### Trend Analysis",
+            f"- **Primary Trend:** {trend.get('primary', 'Unknown').title()}",
+            f"- **Trend Strength:** {trend.get('strength', 0)*100:.0f}%",
+            f"",
+            "### Key Indicators",
+            f"- **RSI (14):** {indicators.get('rsi', 0):.1f}",
+            f"- **MACD:** {indicators.get('macd', 0):.2f} (Signal: {indicators.get('macd_signal', 0):.2f})",
+            f"- **ADX:** {indicators.get('adx', 0):.1f}",
+            f"- **Stochastic:** {indicators.get('stochastic_k', 0):.1f}",
+        ]
+        
+        if patterns:
+            answer_parts.append("")
+            answer_parts.append("### Detected Patterns")
+            for p in patterns[:5]:
+                answer_parts.append(f"- {p.get('name', 'Unknown')}: {p.get('signal', 'N/A')}")
+        
+        overall = signals.get("overall", {})
+        if overall:
+            answer_parts.append("")
+            answer_parts.append("### Overall Signal")
+            answer_parts.append(f"**{overall.get('signal', 'HOLD')}** (Confidence: {overall.get('confidence', 0)*100:.0f}%)")
+        
+        return {
+            "type": "technical_analysis",
+            "answer": "\n".join(answer_parts),
+            "technical_data": result,
+            "symbols": symbols,
+        }
+
+    # ── Correlation Analysis Handler ──────────────────────────────────────
+    async def _handle_correlation_analysis(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Analyze correlations and pair trading opportunities."""
+        logger.info("[%s] Correlation analysis for %s", self.name, symbols)
+        
+        try:
+            result = await self.correlation_agent.analyze_correlations(symbols)
+        except Exception as exc:
+            logger.error("[%s] Correlation analysis failed: %s", self.name, exc)
+            return {
+                "type": "correlation_analysis",
+                "answer": f"⚠️ Correlation analysis failed: {exc}",
+                "symbols": symbols,
+            }
+        
+        matrix = result.get("correlation_matrix", {})
+        pairs = result.get("top_pairs", [])
+        diversification = result.get("diversification_metrics", {})
+        
+        answer_parts = [
+            f"## 🔗 Correlation Analysis",
+            f"",
+            f"**Symbols:** {', '.join(symbols)}",
+            f"",
+            "### Correlation Matrix",
+        ]
+        
+        # Build a simple correlation table
+        for sym1, corrs in matrix.items():
+            corr_str = ", ".join([f"{s2}: {c:.2f}" for s2, c in corrs.items() if s2 != sym1])
+            answer_parts.append(f"- **{sym1}:** {corr_str}")
+        
+        if pairs:
+            answer_parts.append("")
+            answer_parts.append("### Top Correlated Pairs")
+            for p in pairs[:5]:
+                answer_parts.append(f"- {p.get('pair', '?')}: {p.get('correlation', 0):.2f}")
+        
+        answer_parts.append("")
+        answer_parts.append("### Diversification Metrics")
+        answer_parts.append(f"- **Average Correlation:** {diversification.get('avg_correlation', 0):.2f}")
+        answer_parts.append(f"- **Diversification Score:** {diversification.get('score', 0)*100:.0f}%")
+        
+        return {
+            "type": "correlation_analysis",
+            "answer": "\n".join(answer_parts),
+            "correlation_data": result,
+            "symbols": symbols,
+        }
+
+    # ── Execution Handler ─────────────────────────────────────────────────
+    async def _handle_execution(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Handle paper trading execution and portfolio queries."""
+        logger.info("[%s] Execution handler for: %s", self.name, query)
+        
+        query_lower = query.lower()
+        
+        # Portfolio summary
+        if any(kw in query_lower for kw in ["portfolio", "positions", "holdings", "balance"]):
+            # Get current prices for valuation if we have symbols
+            current_prices = {}
+            if symbols:
+                market_results = await asyncio.gather(
+                    *[self.market_agent.analyze(s) for s in symbols],
+                    return_exceptions=True,
+                )
+                for md in market_results:
+                    if isinstance(md, dict) and "price" in md:
+                        current_prices[md["symbol"]] = md["price"]
+            
+            portfolio = await self.execution_agent.get_portfolio_summary(current_prices or None)
+            
+            summary = portfolio.get("summary", {})
+            positions = portfolio.get("positions", [])
+            stats = portfolio.get("trade_statistics", {})
+            
+            answer_parts = [
+                "## 💼 Portfolio Summary",
+                "",
+                "### Account Value",
+                f"- **Total Value:** ${summary.get('total_value', 0):,.2f}",
+                f"- **Cash:** ${summary.get('cash', 0):,.2f}",
+                f"- **Position Value:** ${summary.get('position_value', 0):,.2f}",
+                f"- **Total P&L:** ${summary.get('total_pnl', 0):+,.2f} ({summary.get('total_return_pct', 0):+.2f}%)",
+            ]
+            
+            if positions:
+                answer_parts.append("")
+                answer_parts.append("### Open Positions")
+                for pos in positions:
+                    icon = "📈" if pos.get("unrealized_pnl", 0) >= 0 else "📉"
+                    answer_parts.append(
+                        f"- {icon} **{pos['symbol']}**: {pos['quantity']} shares @ ${pos['current_price']:.2f} "
+                        f"(P&L: ${pos['unrealized_pnl']:+,.2f})"
+                    )
+            
+            answer_parts.append("")
+            answer_parts.append("### Trade Statistics")
+            answer_parts.append(f"- **Total Trades:** {stats.get('total_trades', 0)}")
+            answer_parts.append(f"- **Win Rate:** {stats.get('win_rate', 0)*100:.1f}%")
+            
+            return {
+                "type": "execution",
+                "answer": "\n".join(answer_parts),
+                "portfolio": portfolio,
+                "symbols": symbols,
+            }
+        
+        # If user wants to trade
+        if any(kw in query_lower for kw in ["buy", "sell", "order"]):
+            # Get current price
+            if not symbols:
+                return {
+                    "type": "execution",
+                    "answer": "⚠️ Please specify a symbol to trade.",
+                    "symbols": [],
+                }
+            
+            symbol = symbols[0]
+            side = "buy" if "buy" in query_lower else "sell"
+            
+            # Get current price
+            market_data = await self.market_agent.analyze(symbol)
+            if "error" in market_data and "price" not in market_data:
+                return {
+                    "type": "execution",
+                    "answer": f"⚠️ Could not get price for {symbol}: {market_data.get('error')}",
+                    "symbols": symbols,
+                }
+            
+            current_price = market_data.get("price", 0)
+            
+            # Get recommended position size
+            sizing = await self.execution_agent.calculate_position_size(
+                symbol,
+                {"confidence": 0.7},
+                current_price,
+            )
+            
+            answer_parts = [
+                f"## 📝 Trade Setup: {side.upper()} {symbol}",
+                "",
+                f"**Current Price:** ${current_price:.2f}",
+                "",
+                "### Recommended Position Size",
+                f"- **Shares:** {sizing.get('recommended_shares', 0)}",
+                f"- **Value:** ${sizing.get('position_value', 0):,.2f}",
+                f"- **% of Portfolio:** {sizing.get('position_pct', 0):.1f}%",
+                "",
+                "To execute this trade, confirm the quantity and I'll submit the order.",
+            ]
+            
+            return {
+                "type": "execution",
+                "answer": "\n".join(answer_parts),
+                "trade_setup": {
+                    "symbol": symbol,
+                    "side": side,
+                    "current_price": current_price,
+                    "sizing": sizing,
+                },
+                "symbols": symbols,
+            }
+        
+        # Default: show analytics
+        analytics = await self.execution_agent.get_execution_analytics()
+        
+        return {
+            "type": "execution",
+            "answer": "## 📊 Execution Analytics\n\n" + str(analytics),
+            "analytics": analytics,
+            "symbols": symbols,
         }
 
     # ── Existing pipeline methods (unchanged) ─────────────────────────────

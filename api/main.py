@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes.admin import router as admin_router
 from api.routes.analysis import router as analysis_router
 from api.routes.auth import router as auth_router
+from api.routes.trading import router as trading_router
 from core.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(analysis_router)
+app.include_router(trading_router)
 
 
 @app.get("/")

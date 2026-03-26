@@ -22,6 +22,7 @@ openai>=1.58,<2
 # Stock Data
 yfinance>=0.2.51,<1
 numpy>=1.26,<3
+scipy>=1.11,<2
 
 # Web Crawling (web_search + web_fetch)
 beautifulsoup4>=4.12,<5
