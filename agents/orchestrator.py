@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from agents.market_agent import MarketAnalystAgent
 from agents.news_agent import NewsAnalystAgent
@@ -28,16 +28,52 @@ from agents.risk_agent import RiskManagerAgent
 from agents.decision_agent import DecisionAgent
 from agents.research_agent import ResearchAgent
 from agents.global_market_agent import GlobalMarketAdvisorAgent
-# New advanced agents
-from agents.portfolio_agent import PortfolioOptimizationAgent
-from agents.backtest_agent import BacktestingAgent
-from agents.volatility_agent import VolatilityModelingAgent
-from agents.technical_strategy_agent import TechnicalStrategyAgent
-from agents.correlation_agent import CorrelationAnalysisAgent
-from agents.adaptive_agent import AdaptiveLearningAgent
-from agents.execution_agent import ExecutionAgent
 from core.llm import llm_json, llm_chat, start_tracking
 from tools.web_tools import web_search, web_fetch
+
+# Lazy imports for advanced agents (require scipy)
+# These are imported on first use to avoid breaking basic endpoints
+_ADVANCED_AGENTS_AVAILABLE = False
+PortfolioOptimizationAgent = None
+BacktestingAgent = None
+VolatilityModelingAgent = None
+TechnicalStrategyAgent = None
+CorrelationAnalysisAgent = None
+AdaptiveLearningAgent = None
+ExecutionAgent = None
+
+def _load_advanced_agents():
+    """Lazy load advanced agents that require scipy."""
+    global _ADVANCED_AGENTS_AVAILABLE
+    global PortfolioOptimizationAgent, BacktestingAgent, VolatilityModelingAgent
+    global TechnicalStrategyAgent, CorrelationAnalysisAgent, AdaptiveLearningAgent, ExecutionAgent
+    
+    if _ADVANCED_AGENTS_AVAILABLE:
+        return True
+    
+    try:
+        from agents.portfolio_agent import PortfolioOptimizationAgent as _Portfolio
+        from agents.backtest_agent import BacktestingAgent as _Backtest
+        from agents.volatility_agent import VolatilityModelingAgent as _Volatility
+        from agents.technical_strategy_agent import TechnicalStrategyAgent as _Technical
+        from agents.correlation_agent import CorrelationAnalysisAgent as _Correlation
+        from agents.adaptive_agent import AdaptiveLearningAgent as _Adaptive
+        from agents.execution_agent import ExecutionAgent as _Execution
+        
+        PortfolioOptimizationAgent = _Portfolio
+        BacktestingAgent = _Backtest
+        VolatilityModelingAgent = _Volatility
+        TechnicalStrategyAgent = _Technical
+        CorrelationAnalysisAgent = _Correlation
+        AdaptiveLearningAgent = _Adaptive
+        ExecutionAgent = _Execution
+        
+        _ADVANCED_AGENTS_AVAILABLE = True
+        logger.info("Advanced trading agents loaded successfully")
+        return True
+    except ImportError as e:
+        logger.warning("Advanced agents unavailable (scipy not installed): %s", e)
+        return False
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +153,7 @@ class OrchestratorAgent:
     name = "OrchestratorAgent"
 
     def __init__(self) -> None:
-        # Core agents
+        # Core agents (always available)
         self.market_agent = MarketAnalystAgent()
         self.news_agent = NewsAnalystAgent()
         self.sentiment_agent = SentimentAgent()
@@ -126,14 +162,42 @@ class OrchestratorAgent:
         self.research_agent = ResearchAgent()
         self.global_market_agent = GlobalMarketAdvisorAgent()
         
-        # Advanced agents
-        self.portfolio_agent = PortfolioOptimizationAgent()
-        self.backtest_agent = BacktestingAgent()
-        self.volatility_agent = VolatilityModelingAgent()
-        self.technical_agent = TechnicalStrategyAgent()
-        self.correlation_agent = CorrelationAnalysisAgent()
-        self.adaptive_agent = AdaptiveLearningAgent()
-        self.execution_agent = ExecutionAgent()
+        # Advanced agents (lazy-loaded, require scipy)
+        self._advanced_loaded = False
+        self.portfolio_agent = None
+        self.backtest_agent = None
+        self.volatility_agent = None
+        self.technical_agent = None
+        self.correlation_agent = None
+        self.adaptive_agent = None
+        self.execution_agent = None
+    
+    def _ensure_advanced_agents(self) -> bool:
+        """Lazy-load advanced agents on first use."""
+        if self._advanced_loaded:
+            return self.portfolio_agent is not None
+        
+        self._advanced_loaded = True
+        if _load_advanced_agents():
+            self.portfolio_agent = PortfolioOptimizationAgent()
+            self.backtest_agent = BacktestingAgent()
+            self.volatility_agent = VolatilityModelingAgent()
+            self.technical_agent = TechnicalStrategyAgent()
+            self.correlation_agent = CorrelationAnalysisAgent()
+            self.adaptive_agent = AdaptiveLearningAgent()
+            self.execution_agent = ExecutionAgent()
+            return True
+        return False
+    
+    def _advanced_agents_unavailable(self, feature: str) -> dict[str, Any]:
+        """Return error response when advanced agents are unavailable."""
+        return {
+            "type": "error",
+            "answer": f"⚠️ **{feature.title()} is unavailable** in this environment.\n\n"
+                      f"This feature requires the `scipy` package which is not installed. "
+                      f"Please use the Docker deployment or local installation for advanced trading features.",
+            "symbols": [],
+        }
 
     # ── Public entry point ────────────────────────────────────────────────
     async def chat(self, user_message: str) -> dict[str, Any]:
@@ -167,17 +231,35 @@ class OrchestratorAgent:
         if intent == "global_outlook":
             result = await self._handle_global_outlook(symbols, query)
         elif intent == "portfolio_optimization" and symbols:
-            result = await self._handle_portfolio_optimization(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_portfolio_optimization(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("portfolio optimization")
         elif intent == "backtest" and symbols:
-            result = await self._handle_backtest(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_backtest(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("backtesting")
         elif intent == "volatility_analysis" and symbols:
-            result = await self._handle_volatility_analysis(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_volatility_analysis(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("volatility analysis")
         elif intent == "technical_analysis" and symbols:
-            result = await self._handle_technical_analysis(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_technical_analysis(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("technical analysis")
         elif intent == "correlation_analysis" and len(symbols) >= 2:
-            result = await self._handle_correlation_analysis(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_correlation_analysis(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("correlation analysis")
         elif intent == "execution":
-            result = await self._handle_execution(symbols, query)
+            if self._ensure_advanced_agents():
+                result = await self._handle_execution(symbols, query)
+            else:
+                result = self._advanced_agents_unavailable("paper trading")
         elif intent == "quick_status" and symbols:
             result = await self._handle_quick_status(symbols, query)
         elif intent == "full_analysis" and symbols:

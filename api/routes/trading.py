@@ -7,6 +7,8 @@ Endpoints for:
 - Technical analysis
 - Correlation analysis
 - Paper trading execution
+
+Note: These endpoints require scipy. If unavailable, they return 503 errors.
 """
 
 from __future__ import annotations
@@ -17,26 +19,51 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from agents.portfolio_agent import PortfolioOptimizationAgent
-from agents.backtest_agent import BacktestingAgent
-from agents.volatility_agent import VolatilityModelingAgent
-from agents.technical_strategy_agent import TechnicalStrategyAgent
-from agents.correlation_agent import CorrelationAnalysisAgent
-from agents.adaptive_agent import AdaptiveLearningAgent
-from agents.execution_agent import ExecutionAgent
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/advanced", tags=["advanced"])
 
-# Initialize agents
-portfolio_agent = PortfolioOptimizationAgent()
-backtest_agent = BacktestingAgent()
-volatility_agent = VolatilityModelingAgent()
-technical_agent = TechnicalStrategyAgent()
-correlation_agent = CorrelationAnalysisAgent()
-adaptive_agent = AdaptiveLearningAgent()
-execution_agent = ExecutionAgent()
+# Lazy-loaded agents (require scipy)
+_agents_loaded = False
+_agents = {}
+
+def _load_agents():
+    """Lazy load advanced agents that require scipy."""
+    global _agents_loaded, _agents
+    if _agents_loaded:
+        return bool(_agents)
+    
+    _agents_loaded = True
+    try:
+        from agents.portfolio_agent import PortfolioOptimizationAgent
+        from agents.backtest_agent import BacktestingAgent
+        from agents.volatility_agent import VolatilityModelingAgent
+        from agents.technical_strategy_agent import TechnicalStrategyAgent
+        from agents.correlation_agent import CorrelationAnalysisAgent
+        from agents.adaptive_agent import AdaptiveLearningAgent
+        from agents.execution_agent import ExecutionAgent
+        
+        _agents["portfolio"] = PortfolioOptimizationAgent()
+        _agents["backtest"] = BacktestingAgent()
+        _agents["volatility"] = VolatilityModelingAgent()
+        _agents["technical"] = TechnicalStrategyAgent()
+        _agents["correlation"] = CorrelationAnalysisAgent()
+        _agents["adaptive"] = AdaptiveLearningAgent()
+        _agents["execution"] = ExecutionAgent()
+        logger.info("Advanced trading agents loaded successfully")
+        return True
+    except ImportError as e:
+        logger.warning("Advanced trading agents unavailable: %s", e)
+        return False
+
+def _require_agents():
+    """Ensure agents are loaded, raise 503 if unavailable."""
+    if not _load_agents():
+        raise HTTPException(
+            status_code=503,
+            detail="Advanced trading features require scipy which is not installed in this environment. "
+                   "Please use Docker deployment or local installation."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -200,8 +227,9 @@ async def optimize_portfolio(req: PortfolioRequest):
     
     Returns optimal weights for max Sharpe, min variance, and risk parity portfolios.
     """
+    _require_agents()
     try:
-        result = await portfolio_agent.analyze(
+        result = await _agents["portfolio"].analyze(
             symbols=req.symbols,
             current_weights=req.target_weights,
             risk_free_rate=req.risk_free_rate,
@@ -236,8 +264,9 @@ async def run_backtest(req: BacktestRequest):
             detail=f"Invalid strategy. Choose from: {', '.join(valid_strategies)}"
         )
     
+    _require_agents()
     try:
-        result = await backtest_agent.backtest_strategy(
+        result = await _agents["backtest"].backtest_strategy(
             symbol=req.symbol,
             strategy=req.strategy,
             days=req.days,
@@ -263,8 +292,9 @@ async def run_monte_carlo(req: BacktestRequest, simulations: int = 100):
     """
     Run Monte Carlo simulation on a backtested strategy.
     """
+    _require_agents()
     try:
-        result = await backtest_agent.monte_carlo_simulation(
+        result = await _agents["backtest"].monte_carlo_simulation(
             symbol=req.symbol,
             strategy=req.strategy,
             days=req.days,
@@ -285,8 +315,9 @@ async def analyze_volatility(req: VolatilityRequest):
     """
     Analyze volatility using multiple models (Historical, EWMA, Parkinson, GARCH).
     """
+    _require_agents()
     try:
-        result = await volatility_agent.analyze(
+        result = await _agents["volatility"].analyze(
             symbol=req.symbol,
             days=req.days,
         )
@@ -312,8 +343,9 @@ async def analyze_technical(req: TechnicalRequest):
     """
     Comprehensive technical analysis with indicators, patterns, and signals.
     """
+    _require_agents()
     try:
-        result = await technical_agent.analyze(
+        result = await _agents["technical"].analyze(
             symbol=req.symbol,
             days=req.days,
         )
@@ -340,8 +372,9 @@ async def analyze_correlation(req: CorrelationRequest):
     """
     Analyze correlations between multiple assets.
     """
+    _require_agents()
     try:
-        result = await correlation_agent.analyze_correlations(
+        result = await _agents["correlation"].analyze_correlations(
             symbols=req.symbols,
             days=req.days,
         )
@@ -367,8 +400,9 @@ async def analyze_pair(req: PairAnalysisRequest):
     """
     Detailed pair trading analysis for two assets.
     """
+    _require_agents()
     try:
-        result = await correlation_agent.analyze_pair(
+        result = await _agents["correlation"].analyze_pair(
             symbol1=req.symbol1,
             symbol2=req.symbol2,
             days=req.days,
@@ -396,6 +430,7 @@ async def adaptive_analysis(req: AdaptiveAnalysisRequest):
     """
     Adaptive learning analysis with regime detection and strategy recommendations.
     """
+    _require_agents()
     try:
         # Get price data first
         from tools.stock_api import get_stock_history
@@ -404,7 +439,7 @@ async def adaptive_analysis(req: AdaptiveAnalysisRequest):
         if not price_data or len(price_data) < 50:
             raise HTTPException(status_code=400, detail="Insufficient price data")
         
-        result = await adaptive_agent.analyze(
+        result = await _agents["adaptive"].analyze(
             symbol=req.symbol,
             price_data=price_data,
         )
@@ -438,6 +473,7 @@ async def submit_order(req: OrderRequest):
     """
     Submit a paper trading order.
     """
+    _require_agents()
     try:
         # Get current price for market orders
         from tools.stock_api import get_stock_price
@@ -446,7 +482,7 @@ async def submit_order(req: OrderRequest):
         if current_price is None:
             raise HTTPException(status_code=400, detail=f"Could not get price for {req.symbol}")
         
-        result = await execution_agent.submit_order(
+        result = await _agents["execution"].submit_order(
             symbol=req.symbol,
             side=req.side,
             quantity=req.quantity,
@@ -478,6 +514,7 @@ async def get_portfolio(symbols: str = ""):
     
     Optionally pass symbols (comma-separated) to get current prices for valuation.
     """
+    _require_agents()
     try:
         current_prices = {}
         if symbols:
@@ -488,7 +525,7 @@ async def get_portfolio(symbols: str = ""):
                 if price:
                     current_prices[sym] = price
         
-        result = await execution_agent.get_portfolio_summary(current_prices or None)
+        result = await _agents["execution"].get_portfolio_summary(current_prices or None)
         
         return PortfolioSummaryResponse(
             summary=result.get("summary", {}),
@@ -506,8 +543,9 @@ async def calculate_position_size(req: PositionSizeRequest):
     """
     Calculate recommended position size based on risk parameters.
     """
+    _require_agents()
     try:
-        result = await execution_agent.calculate_position_size(
+        result = await _agents["execution"].calculate_position_size(
             symbol=req.symbol,
             signal={"confidence": req.confidence},
             current_price=req.current_price,
@@ -534,8 +572,9 @@ async def get_trade_history(symbol: str = None, limit: int = 50):
     """
     Get paper trading trade history.
     """
+    _require_agents()
     try:
-        trades = await execution_agent.get_trade_history(
+        trades = await _agents["execution"].get_trade_history(
             symbol=symbol,
             limit=min(limit, 200),
         )
@@ -550,8 +589,9 @@ async def get_execution_analytics():
     """
     Get execution quality analytics.
     """
+    _require_agents()
     try:
-        analytics = await execution_agent.get_execution_analytics()
+        analytics = await _agents["execution"].get_execution_analytics()
         return analytics
     except Exception as e:
         logger.exception("Analytics fetch failed")
@@ -563,8 +603,9 @@ async def reset_portfolio(initial_capital: float = 100000.0):
     """
     Reset paper trading portfolio to initial state.
     """
+    _require_agents()
     try:
-        result = await execution_agent.reset_portfolio(initial_capital)
+        result = await _agents["execution"].reset_portfolio(initial_capital)
         return result
     except Exception as e:
         logger.exception("Portfolio reset failed")
