@@ -1282,6 +1282,165 @@ def _render_broker_panel():
 def _render_landing_page():
     """Render the eToro/AvaTrade-style landing page for unauthenticated users."""
 
+    # ===== TOP NAVIGATION BAR =====
+    st.markdown("""
+    <style>
+        .top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: rgba(6,11,20,0.92);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-primary);
+            border-radius: 14px;
+            margin-bottom: 20px;
+        }
+        .top-nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .top-nav-logo { font-size: 1.5rem; }
+        .top-nav-name { color: var(--text-primary); font-weight: 800; font-size: 1rem; letter-spacing: -0.01em; }
+        .top-nav-tag { color: var(--accent-cyan); font-size: 0.6rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+        .top-nav-actions { display: flex; gap: 10px; align-items: center; }
+        .top-nav-btn {
+            padding: 8px 22px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            border: none;
+        }
+        .top-nav-btn-signin {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+        }
+        .top-nav-btn-signin:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .top-nav-btn-create {
+            background: var(--gradient-accent);
+            color: #fff;
+        }
+        .top-nav-btn-create:hover { opacity: 0.9; transform: translateY(-1px); }
+        @media (max-width: 600px) {
+            .top-nav { padding: 10px 14px; }
+            .top-nav-name { font-size: 0.85rem; }
+            .top-nav-btn { padding: 6px 14px; font-size: 0.75rem; }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Render top nav bar with Streamlit columns for interactive buttons
+    nav_left, nav_right_1, nav_right_2 = st.columns([6, 1, 1.5])
+    with nav_left:
+        st.markdown("""
+        <div class="top-nav-brand">
+            <span class="top-nav-logo">🦘</span>
+            <div>
+                <div class="top-nav-name">TradingEdge Australia</div>
+                <div class="top-nav-tag">AI Trading Advisory</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with nav_right_1:
+        if st.button("🔑 Sign In", key="top_signin", use_container_width=True):
+            st.session_state["landing_tab"] = "signin"
+    with nav_right_2:
+        if st.button("🚀 Create Account", key="top_create", use_container_width=True, type="primary"):
+            st.session_state["landing_tab"] = "create"
+
+    # ===== INLINE AUTH FORMS (shown when top nav buttons clicked) =====
+    _landing_tab = st.session_state.get("landing_tab")
+    if _landing_tab == "signin":
+        st.markdown("""
+        <div class="main-header">
+            <h1>🔑 Sign In to TradingEdge</h1>
+            <p>Access your AI trading advisory dashboard</p>
+        </div>
+        """, unsafe_allow_html=True)
+        with st.form("top_login_form"):
+            top_email = st.text_input("Email", key="top_login_email", placeholder="you@example.com")
+            top_password = st.text_input("Password", type="password", key="top_login_pw")
+            col_submit, col_cancel = st.columns([3, 1])
+            with col_submit:
+                submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+            with col_cancel:
+                cancelled = st.form_submit_button("✕ Close", use_container_width=True)
+            if cancelled:
+                st.session_state.pop("landing_tab", None)
+                st.rerun()
+            if submitted:
+                if not top_email or not top_password:
+                    st.error("Please fill in all fields")
+                else:
+                    result = _api_login(top_email, top_password)
+                    if "error" in result:
+                        st.error(result["error"])
+                    else:
+                        st.session_state.auth_token = result["access_token"]
+                        st.session_state.auth_user = result["user"]
+                        st.session_state.pop("landing_tab", None)
+                        st.rerun()
+
+    elif _landing_tab == "create":
+        st.markdown("""
+        <div class="main-header">
+            <h1>🚀 Create Your Free Account</h1>
+            <p>Get 3 free AI analysis prompts — no credit card required</p>
+        </div>
+        """, unsafe_allow_html=True)
+        with st.form("top_register_form"):
+            top_reg_name = st.text_input("Full Name", key="top_reg_name", placeholder="John Smith")
+            top_reg_email = st.text_input("Email", key="top_reg_email", placeholder="you@example.com")
+            top_reg_pw = st.text_input("Password", type="password", key="top_reg_pw")
+            top_reg_pw2 = st.text_input("Confirm Password", type="password", key="top_reg_pw2")
+            st.markdown("""
+            <div style="color:var(--text-secondary);font-size:0.82rem;margin:8px 0;line-height:1.6;">
+                <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <div>
+                        <strong style="color:var(--accent-cyan);">🆓 Free Tier</strong><br>
+                        3 AI analysis prompts to explore the platform
+                    </div>
+                    <div>
+                        <strong style="color:var(--accent-green);">💎 Paid Tier — A$15/month</strong><br>
+                        Unlimited prompts • Priority AI processing • Advanced agents
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            col_submit, col_cancel = st.columns([3, 1])
+            with col_submit:
+                submitted = st.form_submit_button("Create Free Account", use_container_width=True, type="primary")
+            with col_cancel:
+                cancelled = st.form_submit_button("✕ Close", use_container_width=True)
+            if cancelled:
+                st.session_state.pop("landing_tab", None)
+                st.rerun()
+            if submitted:
+                if not top_reg_name or not top_reg_email or not top_reg_pw:
+                    st.error("Please fill in all fields")
+                elif top_reg_pw != top_reg_pw2:
+                    st.error("Passwords do not match")
+                elif len(top_reg_pw) < 6:
+                    st.error("Password must be at least 6 characters")
+                else:
+                    result = _api_register(top_reg_email, top_reg_name, top_reg_pw)
+                    if "error" in result:
+                        st.error(result["error"])
+                    else:
+                        st.session_state.auth_token = result["access_token"]
+                        st.session_state.auth_user = result["user"]
+                        st.session_state.pop("landing_tab", None)
+                        st.success("Welcome to TradingEdge! You have 3 free analysis prompts.")
+                        st.rerun()
+
     # ===== HERO SECTION =====
     st.markdown("""
     <div class="hero-section">
