@@ -1,4 +1,4 @@
-"""Streamlit UI — Professional AI Trading Dashboard."""
+"""Streamlit UI — TradingEdge Australia: AI-Powered Global Trading Advisory Platform."""
 
 from __future__ import annotations
 
@@ -22,71 +22,393 @@ def _get_secret(key: str, default: str = "") -> str:
 API_BASE = _get_secret("API_BASE_URL", "http://localhost:8000") + "/api/v1"
 _VERCEL_BYPASS = _get_secret("VERCEL_AUTOMATION_BYPASS_SECRET")
 
+# ---------------------------------------------------------------------------
+# Australian Broker Registry
+# ---------------------------------------------------------------------------
+AUSTRALIAN_BROKERS = {
+    "CommSec": {
+        "url": "https://www.commsec.com.au",
+        "icon": "🏦",
+        "desc": "Australia's #1 online broker by Commonwealth Bank",
+        "markets": ["ASX", "US", "UK"],
+        "type": "Full Service",
+    },
+    "CMC Markets": {
+        "url": "https://www.cmcmarkets.com/en-au",
+        "icon": "📊",
+        "desc": "CFDs & stockbroking with advanced platform",
+        "markets": ["ASX", "US", "UK", "EU", "Asia"],
+        "type": "CFD & Stocks",
+    },
+    "IG Markets": {
+        "url": "https://www.ig.com/au",
+        "icon": "📈",
+        "desc": "World's #1 CFD provider with share trading",
+        "markets": ["ASX", "US", "UK", "EU", "Asia", "Forex"],
+        "type": "CFD & Stocks",
+    },
+    "Stake": {
+        "url": "https://hellostake.com/au",
+        "icon": "🚀",
+        "desc": "Commission-free US & ASX share trading",
+        "markets": ["ASX", "US"],
+        "type": "Commission-Free",
+    },
+    "SelfWealth": {
+        "url": "https://www.selfwealth.com.au",
+        "icon": "💰",
+        "desc": "Flat-fee ASX trading with community insights",
+        "markets": ["ASX", "US"],
+        "type": "Flat Fee",
+    },
+    "Interactive Brokers": {
+        "url": "https://www.interactivebrokers.com.au",
+        "icon": "🌐",
+        "desc": "Global markets access with lowest margin rates",
+        "markets": ["ASX", "US", "UK", "EU", "Asia", "Forex", "Options"],
+        "type": "Global",
+    },
+    "Westpac Online Investing": {
+        "url": "https://www.westpac.com.au/personal-banking/share-trading",
+        "icon": "🏛️",
+        "desc": "Share trading by Westpac Banking Corp",
+        "markets": ["ASX"],
+        "type": "Bank-Backed",
+    },
+    "nabtrade": {
+        "url": "https://www.nabtrade.com.au",
+        "icon": "🔷",
+        "desc": "NAB's online trading platform for ASX & global",
+        "markets": ["ASX", "US", "UK"],
+        "type": "Bank-Backed",
+    },
+    "ANZ Share Investing": {
+        "url": "https://www.anz.com.au/personal/investing/online-share-trading",
+        "icon": "🔵",
+        "desc": "ANZ's share trading platform",
+        "markets": ["ASX"],
+        "type": "Bank-Backed",
+    },
+    "Superhero": {
+        "url": "https://www.superhero.com.au",
+        "icon": "⚡",
+        "desc": "Low-cost ASX & US share trading platform",
+        "markets": ["ASX", "US", "ETFs"],
+        "type": "Low Cost",
+    },
+    "Saxo Markets": {
+        "url": "https://www.home.saxo/en-au",
+        "icon": "💹",
+        "desc": "Multi-asset trading with professional tools",
+        "markets": ["ASX", "US", "UK", "EU", "Asia", "Forex", "Options", "Bonds"],
+        "type": "Multi-Asset",
+    },
+    "eToro Australia": {
+        "url": "https://www.etoro.com/en-au",
+        "icon": "🌍",
+        "desc": "Social trading & copy trading platform",
+        "markets": ["ASX", "US", "UK", "EU", "Crypto"],
+        "type": "Social Trading",
+    },
+}
+
+# ASX Top Stocks for quick access
+ASX_TOP_STOCKS = ["BHP", "CBA", "CSL", "NAB", "WBC", "ANZ", "FMG", "WES", "MQG", "RIO",
+                   "TLS", "WOW", "ALL", "GMG", "TCL", "COL", "STO", "WDS", "JHX", "REA"]
+
+US_TOP_STOCKS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "AMD"]
+
+
 st.set_page_config(
-    page_title="AI Multi-Agent Trading System",
-    page_icon="📊",
+    page_title="TradingEdge Australia — AI Trading Advisory",
+    page_icon="🦘",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS — Professional Dark Theme
+# Custom CSS — Premium eToro/AvaTrade-inspired Dark Theme
 # ---------------------------------------------------------------------------
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-    .stApp { background-color: #0a0e17; font-family: 'Inter', sans-serif; }
+    :root {
+        --bg-primary: #060b14;
+        --bg-secondary: #0c1220;
+        --bg-card: #111827;
+        --bg-card-hover: #162032;
+        --border-primary: #1e2d3d;
+        --border-accent: #2563eb;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+        --accent-green: #10b981;
+        --accent-red: #ef4444;
+        --accent-blue: #3b82f6;
+        --accent-yellow: #f59e0b;
+        --accent-cyan: #06b6d4;
+        --accent-purple: #8b5cf6;
+        --gradient-hero: linear-gradient(135deg, #0c1220 0%, #1a1a3e 40%, #0f172a 100%);
+        --gradient-card: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+        --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+        --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.1);
+    }
 
-    .main-header {
-        background: linear-gradient(135deg, #0f1923 0%, #1a2332 100%);
-        border: 1px solid #1e2d3d;
-        border-radius: 12px;
-        padding: 20px 28px;
+    .stApp { background-color: var(--bg-primary); font-family: 'Inter', sans-serif; }
+
+    /* ===== HERO SECTION ===== */
+    .hero-section {
+        background: var(--gradient-hero);
+        border-radius: 20px;
+        padding: 48px 40px;
+        margin-bottom: 24px;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        box-shadow: var(--shadow-glow);
+    }
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .hero-section::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -10%;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .hero-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+    .hero-logo {
+        font-size: 2.2rem;
+        line-height: 1;
+    }
+    .hero-brand-text {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+    }
+    .hero-brand-sub {
+        font-size: 0.7rem;
+        color: var(--accent-cyan);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+    .hero-title {
+        font-size: 2.4rem;
+        font-weight: 900;
+        color: var(--text-primary);
+        margin: 16px 0 12px 0;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+    }
+    .hero-title span { 
+        background: var(--gradient-accent);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .hero-subtitle {
+        color: var(--text-secondary);
+        font-size: 1.05rem;
+        line-height: 1.6;
+        max-width: 680px;
+        margin-bottom: 24px;
+    }
+    .hero-badges {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
         margin-bottom: 20px;
     }
-    .main-header h1 { color: #e1e8f0; margin: 0; font-size: 1.6rem; font-weight: 700; }
-    .main-header p { color: #7a8fa6; margin: 4px 0 0 0; font-size: 0.85rem; }
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        color: var(--accent-blue);
+        padding: 6px 14px;
+        border-radius: 24px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .hero-disclaimer {
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        line-height: 1.5;
+    }
 
+    /* ===== MAIN HEADER ===== */
+    .main-header {
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 16px;
+        padding: 24px 28px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow-glow);
+    }
+    .main-header h1 { color: var(--text-primary); margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+    .main-header p { color: var(--text-secondary); margin: 4px 0 0 0; font-size: 0.85rem; }
+
+    /* ===== FEATURE CARDS ===== */
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .feature-card {
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 14px;
+        padding: 24px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .feature-card:hover {
+        border-color: var(--border-accent);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(59,130,246,0.1);
+    }
+    .feature-icon {
+        font-size: 2rem;
+        margin-bottom: 12px;
+        display: block;
+    }
+    .feature-title {
+        color: var(--text-primary);
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+    .feature-desc {
+        color: var(--text-secondary);
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+
+    /* ===== METRIC CARDS ===== */
     .metric-card {
-        background: linear-gradient(135deg, #111827 0%, #151f2e 100%);
-        border: 1px solid #1e2d3d;
-        border-radius: 10px;
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 12px;
         padding: 16px 18px;
         text-align: center;
+        transition: border-color 0.2s;
     }
-    .metric-label { color: #7a8fa6; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-card:hover { border-color: rgba(59,130,246,0.3); }
+    .metric-label { color: var(--text-muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
     .metric-value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
-    .metric-sub { color: #7a8fa6; font-size: 0.75rem; margin-top: 2px; }
-    .metric-green { color: #00d26a; }
-    .metric-red { color: #ff4757; }
-    .metric-yellow { color: #ffa502; }
-    .metric-blue { color: #3b82f6; }
-    .metric-white { color: #e1e8f0; }
+    .metric-sub { color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
+    .metric-green { color: var(--accent-green); }
+    .metric-red { color: var(--accent-red); }
+    .metric-yellow { color: var(--accent-yellow); }
+    .metric-blue { color: var(--accent-blue); }
+    .metric-white { color: var(--text-primary); }
 
+    /* ===== BROKER CARDS ===== */
+    .broker-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 14px;
+        margin: 16px 0;
+    }
+    .broker-card {
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 12px;
+        padding: 18px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        display: block;
+    }
+    .broker-card:hover {
+        border-color: var(--accent-cyan);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(6,182,212,0.1);
+    }
+    .broker-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+    .broker-icon { font-size: 1.5rem; }
+    .broker-name { color: var(--text-primary); font-size: 0.95rem; font-weight: 700; }
+    .broker-type {
+        background: rgba(6,182,212,0.12);
+        color: var(--accent-cyan);
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 10px;
+        margin-left: auto;
+    }
+    .broker-desc { color: var(--text-secondary); font-size: 0.78rem; line-height: 1.4; margin-bottom: 8px; }
+    .broker-markets {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .broker-market-tag {
+        background: rgba(59,130,246,0.1);
+        color: var(--accent-blue);
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(59,130,246,0.15);
+    }
+
+    /* ===== DECISION BADGES ===== */
     .decision-badge {
         display: inline-block;
-        padding: 6px 20px;
-        border-radius: 6px;
+        padding: 8px 24px;
+        border-radius: 8px;
         font-size: 1.1rem;
         font-weight: 700;
         letter-spacing: 1px;
     }
-    .badge-buy { background: rgba(0,210,106,0.15); color: #00d26a; border: 1px solid #00d26a; }
-    .badge-sell { background: rgba(255,71,87,0.15); color: #ff4757; border: 1px solid #ff4757; }
-    .badge-hold { background: rgba(255,165,2,0.15); color: #ffa502; border: 1px solid #ffa502; }
+    .badge-buy { background: rgba(16,185,129,0.15); color: var(--accent-green); border: 1px solid var(--accent-green); }
+    .badge-sell { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid var(--accent-red); }
+    .badge-hold { background: rgba(245,158,11,0.15); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
 
+    /* ===== AGENT PANELS ===== */
     .agent-panel {
-        background: #111827;
-        border: 1px solid #1e2d3d;
-        border-radius: 10px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 12px;
         padding: 16px;
         margin-bottom: 12px;
     }
-    .agent-panel h4 { color: #e1e8f0; margin: 0 0 8px 0; font-size: 0.9rem; font-weight: 600; }
-    .agent-panel p { color: #9ca3af; font-size: 0.82rem; line-height: 1.5; margin: 0; word-wrap: break-word; overflow-wrap: break-word; }
+    .agent-panel h4 { color: var(--text-primary); margin: 0 0 8px 0; font-size: 0.9rem; font-weight: 600; }
+    .agent-panel p { color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; margin: 0; word-wrap: break-word; overflow-wrap: break-word; }
 
+    /* ===== SIGNAL TAGS ===== */
     .signal-tag {
         display: inline-block;
         background: rgba(59,130,246,0.12);
@@ -99,40 +421,98 @@ st.markdown("""
         border: 1px solid rgba(59,130,246,0.25);
     }
     .signal-tag-warn {
-        background: rgba(255,165,2,0.12);
-        color: #ffa502;
-        border-color: rgba(255,165,2,0.25);
+        background: rgba(245,158,11,0.12);
+        color: var(--accent-yellow);
+        border-color: rgba(245,158,11,0.25);
     }
     .signal-tag-bad {
-        background: rgba(255,71,87,0.12);
-        color: #ff4757;
-        border-color: rgba(255,71,87,0.25);
+        background: rgba(239,68,68,0.12);
+        color: var(--accent-red);
+        border-color: rgba(239,68,68,0.25);
     }
 
+    /* ===== NEWS ITEMS ===== */
     .news-item {
-        background: #111827;
-        border: 1px solid #1e2d3d;
-        border-radius: 8px;
-        padding: 12px 14px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 10px;
+        padding: 14px 16px;
         margin-bottom: 8px;
+        transition: border-color 0.2s;
     }
-    .news-item h5 { color: #e1e8f0; margin: 0 0 4px 0; font-size: 0.82rem; font-weight: 500; }
-    .news-item p { color: #7a8fa6; font-size: 0.75rem; margin: 0; line-height: 1.4; word-wrap: break-word; }
-    .news-meta { color: #4b5563; font-size: 0.68rem; margin-top: 4px; }
+    .news-item:hover { border-color: rgba(59,130,246,0.3); }
+    .news-item h5 { color: var(--text-primary); margin: 0 0 4px 0; font-size: 0.82rem; font-weight: 500; }
+    .news-item p { color: var(--text-secondary); font-size: 0.75rem; margin: 0; line-height: 1.4; word-wrap: break-word; }
+    .news-meta { color: var(--text-muted); font-size: 0.68rem; margin-top: 4px; }
 
-    .risk-bar-bg { background: #1e2d3d; border-radius: 4px; height: 8px; width: 100%; }
+    /* ===== RISK BAR ===== */
+    .risk-bar-bg { background: var(--border-primary); border-radius: 4px; height: 8px; width: 100%; }
     .risk-bar { border-radius: 4px; height: 8px; transition: width 0.3s; }
 
-    .section-title { color: #9ca3af; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin: 18px 0 10px 0; }
+    /* ===== SECTION TITLE ===== */
+    .section-title { color: var(--text-secondary); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin: 18px 0 10px 0; }
 
-    div[data-testid="stSidebar"] { background: #0f1520; }
+    /* ===== SIDEBAR ===== */
+    div[data-testid="stSidebar"] { background: var(--bg-secondary); border-right: 1px solid var(--border-primary); }
     div[data-testid="stSidebar"] .stMarkdown h1,
     div[data-testid="stSidebar"] .stMarkdown h2,
-    div[data-testid="stSidebar"] .stMarkdown h3 { color: #e1e8f0; }
+    div[data-testid="stSidebar"] .stMarkdown h3 { color: var(--text-primary); }
+
+    /* ===== STAT BAR ===== */
+    .stat-bar {
+        display: flex;
+        justify-content: center;
+        gap: 32px;
+        padding: 14px 0;
+        margin-bottom: 20px;
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 12px;
+    }
+    .stat-item { text-align: center; }
+    .stat-number { color: var(--text-primary); font-size: 1.3rem; font-weight: 800; }
+    .stat-label { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+
+    /* ===== ADVISORY DISCLAIMER BAR ===== */
+    .advisory-bar {
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.2);
+        border-radius: 10px;
+        padding: 12px 18px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .advisory-bar-icon { font-size: 1.1rem; }
+    .advisory-bar-text { color: var(--accent-yellow); font-size: 0.78rem; line-height: 1.4; }
+
+    /* ===== TABS STYLING ===== */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] {
+        background: var(--bg-card);
+        border-radius: 8px;
+        border: 1px solid var(--border-primary);
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background: rgba(59,130,246,0.15) !important;
+        border-color: var(--accent-blue) !important;
+        color: var(--accent-blue) !important;
+    }
 
     /* ===== MOBILE RESPONSIVE ===== */
     @media (max-width: 768px) {
-        .main-header { padding: 14px 16px; margin-bottom: 12px; border-radius: 8px; }
+        .hero-section { padding: 28px 20px; border-radius: 14px; }
+        .hero-title { font-size: 1.6rem; }
+        .hero-subtitle { font-size: 0.9rem; }
+        .hero-badges { gap: 8px; }
+        .hero-badge { font-size: 0.7rem; padding: 4px 10px; }
+        .feature-grid { grid-template-columns: 1fr; gap: 10px; }
+        .broker-grid { grid-template-columns: 1fr; }
+
+        .main-header { padding: 14px 16px; margin-bottom: 12px; border-radius: 10px; }
         .main-header h1 { font-size: 1.15rem; }
         .main-header p { font-size: 0.75rem; }
 
@@ -155,7 +535,9 @@ st.markdown("""
 
         .section-title { font-size: 0.7rem; margin: 12px 0 8px 0; }
 
-        /* Streamlit overrides for mobile */
+        .stat-bar { flex-wrap: wrap; gap: 16px; padding: 10px; }
+        .stat-number { font-size: 1rem; }
+
         section[data-testid="stSidebar"] { min-width: 260px !important; max-width: 280px !important; }
         .stChatInput textarea { font-size: 16px !important; }
         .stButton > button { min-height: 44px; font-size: 0.85rem; }
@@ -164,6 +546,8 @@ st.markdown("""
     }
 
     @media (max-width: 480px) {
+        .hero-section { padding: 20px 14px; }
+        .hero-title { font-size: 1.3rem; }
         .main-header { padding: 12px 12px; }
         .main-header h1 { font-size: 1rem; }
         .metric-value { font-size: 0.9rem; }
@@ -196,6 +580,10 @@ if "auth_user" not in st.session_state:
     st.session_state.auth_user = None
 if "show_admin" not in st.session_state:
     st.session_state.show_admin = False
+if "show_brokers" not in st.session_state:
+    st.session_state.show_brokers = False
+if "active_page" not in st.session_state:
+    st.session_state.active_page = "dashboard"
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -821,21 +1209,269 @@ def _render_admin_panel():
 # ---------------------------------------------------------------------------
 # Login / Register screen
 # ---------------------------------------------------------------------------
-def _render_auth_screen():
+def _render_broker_panel():
+    """Render the Australian broker integration panel."""
     st.markdown("""
-    <div class="main-header" style="text-align:center">
-        <h1>📊 AI Multi-Agent Trading System</h1>
-        <p>Sign in or create an account to get started</p>
+    <div class="main-header">
+        <h1>🏦 Australian Broker Partners</h1>
+        <p>Execute your trades through Australia's leading stockbrokers — we provide the intelligence, you choose where to trade</p>
     </div>
     """, unsafe_allow_html=True)
 
-    tab_login, tab_register = st.tabs(["🔑 Login", "📝 Register"])
+    st.markdown("""
+    <div class="advisory-bar">
+        <span class="advisory-bar-icon">⚡</span>
+        <span class="advisory-bar-text">
+            <strong>How it works:</strong> TradingEdge provides AI-powered analysis and recommendations.
+            When you're ready to act, click through to your preferred broker to execute trades directly.
+            We are an advisory service — not a broker or financial intermediary.
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Filter
+    filter_col1, filter_col2 = st.columns([2, 3])
+    with filter_col1:
+        broker_type_filter = st.selectbox(
+            "Filter by type",
+            ["All", "Full Service", "CFD & Stocks", "Commission-Free", "Flat Fee",
+             "Global", "Bank-Backed", "Low Cost", "Multi-Asset", "Social Trading"],
+            key="broker_type_filter",
+        )
+    with filter_col2:
+        market_filter = st.selectbox(
+            "Filter by market",
+            ["All", "ASX", "US", "UK", "EU", "Asia", "Forex", "Options", "Crypto"],
+            key="broker_market_filter",
+        )
+
+    # Build broker cards HTML
+    cards_html = '<div class="broker-grid">'
+    for name, info in AUSTRALIAN_BROKERS.items():
+        if broker_type_filter != "All" and info["type"] != broker_type_filter:
+            continue
+        if market_filter != "All" and market_filter not in info["markets"]:
+            continue
+        markets_html = "".join(
+            f'<span class="broker-market-tag">{m}</span>' for m in info["markets"]
+        )
+        cards_html += f"""
+        <a href="{info['url']}" target="_blank" class="broker-card" style="text-decoration:none;">
+            <div class="broker-header">
+                <span class="broker-icon">{info['icon']}</span>
+                <span class="broker-name">{name}</span>
+                <span class="broker-type">{info['type']}</span>
+            </div>
+            <div class="broker-desc">{info['desc']}</div>
+            <div class="broker-markets">{markets_html}</div>
+        </a>
+        """
+    cards_html += "</div>"
+    st.markdown(cards_html, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="hero-disclaimer" style="margin-top:24px;">
+        ⚠️ <strong>Disclaimer:</strong> TradingEdge Australia is not affiliated with, endorsed by, or a partner of any
+        broker listed above. Links are provided for your convenience. Always conduct your own due diligence
+        before selecting a broker. Broker availability, fees, and features may change without notice.
+        Australian Financial Services Licence (AFSL) requirements apply to all brokers.
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _render_landing_page():
+    """Render the eToro/AvaTrade-style landing page for unauthenticated users."""
+
+    # ===== HERO SECTION =====
+    st.markdown("""
+    <div class="hero-section">
+        <div class="hero-brand">
+            <span class="hero-logo">🦘</span>
+            <div>
+                <div class="hero-brand-text">TradingEdge Australia</div>
+                <div class="hero-brand-sub">AI-Powered Trading Advisory</div>
+            </div>
+        </div>
+        <h1 class="hero-title">
+            Smarter Trading Decisions with<br>
+            <span>Multi-Agent AI Intelligence</span>
+        </h1>
+        <p class="hero-subtitle">
+            Australia's premier AI trading advisory platform. Get institutional-grade analysis powered by
+            15+ specialised AI agents — covering ASX, US, and global markets. Not a broker.
+            Pure intelligence to help you trade smarter.
+        </p>
+        <div class="hero-badges">
+            <span class="hero-badge">🤖 15+ AI Agents</span>
+            <span class="hero-badge">🇦🇺 ASX & Global Markets</span>
+            <span class="hero-badge">📊 Real-Time Analysis</span>
+            <span class="hero-badge">🔗 12+ Broker Integrations</span>
+            <span class="hero-badge">🛡️ Risk Management</span>
+            <span class="hero-badge">📰 News Sentiment AI</span>
+        </div>
+        <div class="hero-disclaimer">
+            ⚠️ <strong>Important:</strong> TradingEdge Australia is a trading advisory and analysis platform — not a broker,
+            dealer, or financial intermediary. We do not execute trades, hold funds, or provide personal financial advice.
+            All analysis is AI-generated and for informational purposes only. Always consult a licensed financial adviser
+            (AFSL holder) before making investment decisions. Past performance is not indicative of future results.
+            Trading involves risk of loss. ASIC regulated advisory standards apply.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ===== STATS BAR =====
+    st.markdown("""
+    <div class="stat-bar">
+        <div class="stat-item">
+            <div class="stat-number">15+</div>
+            <div class="stat-label">AI Agents</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">50+</div>
+            <div class="stat-label">Markets Covered</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">12</div>
+            <div class="stat-label">AU Broker Links</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">24/7</div>
+            <div class="stat-label">AI Analysis</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">&lt;30s</div>
+            <div class="stat-label">Deep Analysis</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ===== FEATURE CARDS =====
+    st.markdown("""
+    <div class="feature-grid">
+        <div class="feature-card">
+            <span class="feature-icon">🧠</span>
+            <div class="feature-title">Multi-Agent AI Engine</div>
+            <div class="feature-desc">
+                15+ specialised AI agents work together — market analysis, sentiment detection,
+                risk assessment, technical strategy, and portfolio optimisation.
+                Like having a team of analysts at your fingertips.
+            </div>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">🌏</span>
+            <div class="feature-title">ASX & Global Markets</div>
+            <div class="feature-desc">
+                Deep coverage of ASX top 200, US markets (NYSE/NASDAQ), and global exchanges.
+                Analyse BHP, CBA, CSL alongside AAPL, TSLA, and NVDA — all in one place.
+            </div>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">🏦</span>
+            <div class="feature-title">Broker Integration Hub</div>
+            <div class="feature-desc">
+                Seamlessly connect with 12+ Australian brokers — CommSec, CMC, IG, Stake,
+                SelfWealth & more. Get your advisory here, execute trades where you're comfortable.
+            </div>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">📊</span>
+            <div class="feature-title">Technical & Fundamental</div>
+            <div class="feature-desc">
+                Advanced technical indicators (RSI, MACD, Bollinger Bands, MA crossovers)
+                combined with fundamental data — P/E, EPS, market cap, dividend yields.
+            </div>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">🛡️</span>
+            <div class="feature-title">Risk Intelligence</div>
+            <div class="feature-desc">
+                AI-powered risk scoring, volatility modelling, correlation analysis, and
+                portfolio stress testing. Know your exposure before you commit.
+            </div>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">📰</span>
+            <div class="feature-title">News & Sentiment AI</div>
+            <div class="feature-desc">
+                Real-time news aggregation with AI sentiment analysis. Understand market mood,
+                detect catalysts, and spot risks from 100+ news sources.
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ===== HOW IT WORKS =====
+    st.markdown("""
+    <div class="main-header" style="text-align:center;">
+        <h1>How TradingEdge Works</h1>
+        <p style="max-width:600px;margin:8px auto 0 auto;">Three simple steps to institutional-grade trading intelligence</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    step_cols = st.columns(3)
+    steps = [
+        ("1️⃣", "Ask in Plain English",
+         "Type any query — 'Analyse CBA', 'Compare BHP vs RIO', 'Global market outlook'. Our AI understands natural language."),
+        ("2️⃣", "AI Agents Analyse",
+         "15+ specialised agents process market data, news, technicals, risk factors — delivering a comprehensive advisory report."),
+        ("3️⃣", "Execute via Your Broker",
+         "Review the AI advisory, then execute through your preferred Australian broker. We link you directly — no middleman."),
+    ]
+    for col, (icon, title, desc) in zip(step_cols, steps):
+        col.markdown(f"""
+        <div class="metric-card" style="text-align:center;padding:24px 16px;">
+            <div style="font-size:2.2rem;margin-bottom:8px;">{icon}</div>
+            <div style="color:var(--text-primary);font-weight:700;font-size:0.95rem;margin-bottom:6px;">{title}</div>
+            <div style="color:var(--text-secondary);font-size:0.82rem;line-height:1.5;">{desc}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ===== SAMPLE BROKERS PREVIEW =====
+    st.markdown("""
+    <div class="main-header" style="text-align:center;">
+        <h1>🏦 Trade Through Australia's Best Brokers</h1>
+        <p>We provide the intelligence — execute trades where you're comfortable</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    preview_brokers = ["CommSec", "CMC Markets", "IG Markets", "Stake", "SelfWealth", "Interactive Brokers"]
+    broker_html = '<div class="broker-grid">'
+    for bname in preview_brokers:
+        info = AUSTRALIAN_BROKERS[bname]
+        markets_html = "".join(f'<span class="broker-market-tag">{m}</span>' for m in info["markets"][:4])
+        broker_html += f"""
+        <div class="broker-card">
+            <div class="broker-header">
+                <span class="broker-icon">{info['icon']}</span>
+                <span class="broker-name">{bname}</span>
+                <span class="broker-type">{info['type']}</span>
+            </div>
+            <div class="broker-desc">{info['desc']}</div>
+            <div class="broker-markets">{markets_html}</div>
+        </div>
+        """
+    broker_html += "</div>"
+    st.markdown(broker_html, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ===== LOGIN / REGISTER =====
+    st.markdown("""
+    <div class="main-header" style="text-align:center;">
+        <h1>🚀 Get Started — Free</h1>
+        <p>Create your account and get 3 free AI analysis prompts</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_login, tab_register = st.tabs(["🔑 Sign In", "📝 Create Account"])
 
     with tab_login:
         with st.form("login_form"):
-            email = st.text_input("Email", key="login_email")
+            email = st.text_input("Email", key="login_email", placeholder="you@example.com")
             password = st.text_input("Password", type="password", key="login_pw")
-            submitted = st.form_submit_button("Login", use_container_width=True)
+            submitted = st.form_submit_button("Sign In to TradingEdge", use_container_width=True)
             if submitted:
                 if not email or not password:
                     st.error("Please fill in all fields")
@@ -850,17 +1486,25 @@ def _render_auth_screen():
 
     with tab_register:
         with st.form("register_form"):
-            reg_name = st.text_input("Full Name", key="reg_name")
-            reg_email = st.text_input("Email", key="reg_email")
+            reg_name = st.text_input("Full Name", key="reg_name", placeholder="John Smith")
+            reg_email = st.text_input("Email", key="reg_email", placeholder="you@example.com")
             reg_pw = st.text_input("Password", type="password", key="reg_pw")
             reg_pw2 = st.text_input("Confirm Password", type="password", key="reg_pw2")
             st.markdown("""
-            <div style="color:#7a8fa6;font-size:0.8rem;margin:8px 0">
-                <b>Free tier:</b> 3 prompts for testing<br>
-                <b>Paid tier:</b> $10/month — token costs deducted from balance
+            <div style="color:var(--text-secondary);font-size:0.82rem;margin:8px 0;line-height:1.6;">
+                <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <div>
+                        <strong style="color:var(--accent-cyan);">🆓 Free Tier</strong><br>
+                        3 AI analysis prompts to explore the platform
+                    </div>
+                    <div>
+                        <strong style="color:var(--accent-green);">💎 Paid Tier — A$15/month</strong><br>
+                        Unlimited prompts • Priority AI processing • Advanced agents
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            submitted = st.form_submit_button("Create Account", use_container_width=True)
+            submitted = st.form_submit_button("Create Free Account", use_container_width=True)
             if submitted:
                 if not reg_name or not reg_email or not reg_pw:
                     st.error("Please fill in all fields")
@@ -875,15 +1519,27 @@ def _render_auth_screen():
                     else:
                         st.session_state.auth_token = result["access_token"]
                         st.session_state.auth_user = result["user"]
-                        st.success("Account created! You have 3 free prompts.")
+                        st.success("Welcome to TradingEdge! You have 3 free analysis prompts.")
                         st.rerun()
 
+    # ===== FOOTER =====
+    st.markdown("""
+    <div style="text-align:center;margin-top:40px;padding:24px 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="color:var(--text-muted);font-size:0.75rem;line-height:1.6;max-width:700px;margin:0 auto;">
+            <strong>TradingEdge Australia</strong> — AI-Powered Trading Advisory Platform<br>
+            ABN: XX XXX XXX XXX | Not a broker or dealer. Advisory service only.<br>
+            All AI-generated analysis is for informational purposes only and does not constitute financial advice.<br>
+            © 2026 TradingEdge Australia. All rights reserved. 🇦🇺
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
-# If not authenticated, show login screen
+# If not authenticated, show landing page
 # ---------------------------------------------------------------------------
 if not st.session_state.auth_token:
-    _render_auth_screen()
+    _render_landing_page()
     st.stop()
 
 # Refresh user profile from API (gets up-to-date prompt_count / balance)
@@ -897,9 +1553,10 @@ user = st.session_state.auth_user
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("""
-    <div style="text-align:center;padding:10px 0 20px 0">
-        <h2 style="color:#e1e8f0;margin:0">📊 AI Trading Agent</h2>
-        <p style="color:#7a8fa6;font-size:0.8rem;margin:4px 0 0 0">Multi-Agent Investment Intelligence</p>
+    <div style="text-align:center;padding:10px 0 16px 0">
+        <div style="font-size:2rem;margin-bottom:4px;">🦘</div>
+        <h2 style="color:var(--text-primary);margin:0;font-size:1.1rem;font-weight:800;">TradingEdge Australia</h2>
+        <p style="color:var(--accent-cyan);font-size:0.7rem;margin:2px 0 0 0;font-weight:600;letter-spacing:1px;">AI TRADING ADVISORY</p>
     </div>
     """, unsafe_allow_html=True)
     st.divider()
@@ -917,56 +1574,97 @@ with st.sidebar:
     if user["tier"] == "free":
         remaining = max(0, 3 - user["prompt_count"])
         bar_pct = min(100, (user["prompt_count"] / 3) * 100)
-        bar_color = "#00d26a" if remaining > 1 else ("#ffa502" if remaining == 1 else "#ff4757")
+        bar_color = "var(--accent-green)" if remaining > 1 else ("var(--accent-yellow)" if remaining == 1 else "var(--accent-red)")
         st.markdown(f"""
         <div style="margin-bottom:12px">
-            <div style="color:#7a8fa6;font-size:0.72rem;margin-bottom:4px">Free Prompts: {remaining}/3 remaining</div>
+            <div style="color:var(--text-muted);font-size:0.72rem;margin-bottom:4px">Free Prompts: {remaining}/3 remaining</div>
             <div class="risk-bar-bg"><div class="risk-bar" style="width:{bar_pct}%;background:{bar_color}"></div></div>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
         <div class="metric-card" style="margin-bottom:12px">
-            <div class="metric-label">Balance</div>
-            <div class="metric-value {'metric-green' if user['balance_usd'] > 2 else 'metric-red'}">${user['balance_usd']:.4f}</div>
-            <div class="metric-sub">of $10.00 subscription</div>
+            <div class="metric-label">Balance (AUD)</div>
+            <div class="metric-value {'metric-green' if user['balance_usd'] > 2 else 'metric-red'}">A${user['balance_usd']:.4f}</div>
+            <div class="metric-sub">of A$15.00 subscription</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Admin + Logout buttons
-    btn_cols = st.columns(2 if user["role"] == "admin" else 1)
-    if user["role"] == "admin":
-        if btn_cols[0].button("🔧 Admin", use_container_width=True):
-            st.session_state.show_admin = not st.session_state.show_admin
-            st.rerun()
-    logout_col = btn_cols[-1] if user["role"] == "admin" else btn_cols[0]
-    if logout_col.button("🚪 Logout", use_container_width=True):
-        st.session_state.auth_token = None
-        st.session_state.auth_user = None
-        st.session_state.messages = []
+    # Navigation buttons
+    nav_cols = st.columns(3)
+    if nav_cols[0].button("📊 Advisory", use_container_width=True,
+                          help="AI Trading Advisory"):
+        st.session_state.active_page = "dashboard"
         st.session_state.show_admin = False
+        st.session_state.show_brokers = False
         st.rerun()
+    if nav_cols[1].button("🏦 Brokers", use_container_width=True,
+                          help="Australian Broker Hub"):
+        st.session_state.active_page = "brokers"
+        st.session_state.show_admin = False
+        st.session_state.show_brokers = True
+        st.rerun()
+
+    btn_cols_extra = []
+    if user["role"] == "admin":
+        if nav_cols[2].button("🔧 Admin", use_container_width=True):
+            st.session_state.show_admin = not st.session_state.show_admin
+            st.session_state.show_brokers = False
+            st.session_state.active_page = "admin"
+            st.rerun()
+    else:
+        if nav_cols[2].button("🚪 Logout", use_container_width=True):
+            st.session_state.auth_token = None
+            st.session_state.auth_user = None
+            st.session_state.messages = []
+            st.session_state.show_admin = False
+            st.session_state.show_brokers = False
+            st.session_state.active_page = "dashboard"
+            st.rerun()
+
+    if user["role"] == "admin":
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.auth_token = None
+            st.session_state.auth_user = None
+            st.session_state.messages = []
+            st.session_state.show_admin = False
+            st.session_state.show_brokers = False
+            st.session_state.active_page = "dashboard"
+            st.rerun()
 
     st.divider()
 
-    st.markdown("### ⚡ Quick Analyze")
-    quick_symbols = ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA", "AMZN", "META", "AMD"]
-    cols = st.columns(4)
-    for idx, sym in enumerate(quick_symbols):
-        if cols[idx % 4].button(sym, key=f"quick_{sym}", use_container_width=True):
+    # ===== ASX Quick Analyse =====
+    st.markdown("### 🇦🇺 ASX Quick Analyse")
+    asx_cols = st.columns(5)
+    for idx, sym in enumerate(ASX_TOP_STOCKS[:10]):
+        if asx_cols[idx % 5].button(sym, key=f"asx_{sym}", use_container_width=True):
+            st.session_state["quick_input"] = f"Analyze {sym}.AX"
+            st.session_state.show_admin = False
+            st.session_state.show_brokers = False
+            st.session_state.active_page = "dashboard"
+
+    st.divider()
+
+    st.markdown("### 🇺🇸 US Quick Analyse")
+    us_cols = st.columns(4)
+    for idx, sym in enumerate(US_TOP_STOCKS):
+        if us_cols[idx % 4].button(sym, key=f"us_{sym}", use_container_width=True):
             st.session_state["quick_input"] = f"Analyze {sym}"
             st.session_state.show_admin = False
+            st.session_state.show_brokers = False
+            st.session_state.active_page = "dashboard"
 
     st.divider()
 
     # ── Session Cost Tracker ──
-    st.markdown("### 💰 Session Costs")
+    st.markdown("### 💰 Session Costs (AUD)")
     sc = st.session_state.session_cost
     if sc["prompt_count"] > 0:
         st.markdown(f"""
         <div class="metric-card" style="margin-bottom:8px">
             <div class="metric-label">Total Spent</div>
-            <div class="metric-value metric-yellow">${sc['total_cost_usd']:.4f}</div>
+            <div class="metric-value metric-yellow">A${sc['total_cost_usd']:.4f}</div>
             <div class="metric-sub">{sc['prompt_count']} prompt{'s' if sc['prompt_count'] > 1 else ''} • {sc['total_llm_calls']} LLM calls</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1032,25 +1730,42 @@ with st.sidebar:
 
     st.divider()
     st.markdown(
-        '<p style="color:#4b5563;font-size:0.7rem;text-align:center">'
-        'Powered by OpenAI • yfinance • NewsAPI<br>Multi-Agent Architecture</p>',
+        '<p style="color:var(--text-muted);font-size:0.68rem;text-align:center;line-height:1.5;">'
+        '🦘 TradingEdge Australia<br>'
+        'AI Advisory Platform — Not a Broker<br>'
+        'Powered by OpenAI • yfinance • NewsAPI<br>'
+        'Multi-Agent Architecture • ASIC Compliant</p>',
         unsafe_allow_html=True,
     )
 
 
 # ---------------------------------------------------------------------------
-# Main area — Admin or Chat
+# Main area — Admin, Brokers, or Advisory Dashboard
 # ---------------------------------------------------------------------------
 if st.session_state.show_admin and user["role"] == "admin":
     _render_admin_panel()
+elif st.session_state.show_brokers:
+    _render_broker_panel()
 else:
     # ---------------------------------------------------------------------------
-    # Main area — Chat + Dashboard hybrid
+    # Main area — AI Advisory Chat + Dashboard hybrid
     # ---------------------------------------------------------------------------
+
+    # Advisory disclaimer banner
+    st.markdown("""
+    <div class="advisory-bar">
+        <span class="advisory-bar-icon">⚠️</span>
+        <span class="advisory-bar-text">
+            <strong>Advisory Only:</strong> TradingEdge provides AI-generated analysis for informational purposes.
+            This is not financial advice. Always consult a licensed adviser (AFSL) before making investment decisions.
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.markdown("""
     <div class="main-header">
-        <h1>💬 AI Trading Assistant</h1>
-        <p>Ask me anything — stock prices, analysis, news, comparisons, or general market questions</p>
+        <h1>🧠 AI Trading Advisory</h1>
+        <p>Ask me anything — ASX & global stocks, analysis, news, comparisons, or market outlook. Powered by 15+ AI agents.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1064,7 +1779,7 @@ else:
 
     # Check for quick-button input
     quick = st.session_state.pop("quick_input", None)
-    prompt = st.chat_input("Ask anything — e.g. 'CBA stock price', 'Compare AAPL vs MSFT', 'Analyze TSLA'") or quick
+    prompt = st.chat_input("Ask anything — e.g. 'Analyse CBA', 'Compare BHP vs RIO', 'AAPL outlook', 'ASX market sentiment'") or quick
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
