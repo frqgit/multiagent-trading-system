@@ -21,6 +21,14 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24 * 7  # 7 days
 FREE_TIER_PROMPT_LIMIT = 3
 PAID_MONTHLY_CREDIT_USD = 10.00
 
+# Tier-based prompt limits
+TIER_PROMPT_LIMITS = {
+    "free": 3,
+    "basic": 50,
+    "pro": 500,
+    "enterprise": -1,  # unlimited
+}
+
 
 # ---------------------------------------------------------------------------
 # Password helpers

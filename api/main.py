@@ -13,6 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes.admin import router as admin_router
 from api.routes.analysis import router as analysis_router
 from api.routes.auth import router as auth_router
+from api.routes.billing import router as billing_router
+from api.routes.ibkr import router as ibkr_router
+from api.routes.strategy import router as strategy_router
 from api.routes.trading import router as trading_router
 from core.logging_config import setup_logging
 
@@ -73,6 +76,9 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(analysis_router)
 app.include_router(trading_router)
+app.include_router(billing_router)
+app.include_router(ibkr_router)
+app.include_router(strategy_router)
 
 
 @app.get("/")

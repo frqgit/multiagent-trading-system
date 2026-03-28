@@ -28,6 +28,8 @@ from agents.risk_agent import RiskManagerAgent
 from agents.decision_agent import DecisionAgent
 from agents.research_agent import ResearchAgent
 from agents.global_market_agent import GlobalMarketAdvisorAgent
+from agents.ml_agent import MLPredictionAgent
+from agents.strategy_builder import StrategyBuilderAgent
 from core.llm import llm_json, llm_chat, start_tracking
 from tools.web_tools import web_search, web_fetch
 
@@ -82,7 +84,7 @@ _ROUTER_SYSTEM = """You are a financial query router. Given a user message, clas
 
 Return JSON:
 {
-  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook" | "portfolio_optimization" | "backtest" | "volatility_analysis" | "technical_analysis" | "correlation_analysis" | "execution",
+  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook" | "portfolio_optimization" | "backtest" | "volatility_analysis" | "technical_analysis" | "correlation_analysis" | "execution" | "strategy_builder" | "ml_prediction",
   "symbols": ["AAPL"],
   "query": "the original question rephrased for clarity",
   "exchange_hint": "ASX" | "NYSE" | "NASDAQ" | "LSE" | "" 
@@ -101,6 +103,8 @@ RULES:
 - "technical_analysis": user wants technical analysis, chart patterns, indicators (RSI, MACD, Bollinger), Ichimoku, support/resistance, Fibonacci.
 - "correlation_analysis": user asks about correlation, cointegration, pair trading, beta, or diversification analysis.
 - "execution": user wants to place a trade, check portfolio, view positions, order status, or paper trade.
+- "strategy_builder": user wants to create, test, or manage a custom trading strategy, build a strategy, strategy templates, or strategy performance.
+- "ml_prediction": user wants ML prediction, machine learning forecast, AI prediction, or quantitative/data-driven prediction for a stock.
 - Extract ALL stock ticker symbols mentioned or implied. Map company names to tickers:
   "Commonwealth Bank" or "CBA" → "CBA.AX" (ASX)
   "Apple" → "AAPL", "Microsoft" → "MSFT", "Google" → "GOOGL", "Tesla" → "TSLA"
@@ -119,6 +123,8 @@ RULES:
 - If user says "technical", "chart", "pattern", "RSI", "MACD", "Bollinger", "Ichimoku", "support", "resistance", "Fibonacci" — use "technical_analysis".
 - If user says "correlation", "cointegration", "pair trade", "beta", "diversification" — use "correlation_analysis".
 - If user says "trade", "buy", "sell", "order", "portfolio", "position", "execute", "paper" — use "execution".
+- If user says "strategy", "create strategy", "build strategy", "strategy template", "custom strategy", "strategy builder" — use "strategy_builder".
+- If user says "ml predict", "machine learning", "ai prediction", "quantitative", "model prediction", "forecast model" — use "ml_prediction".
 - exchange_hint: if the stock is on a specific exchange (e.g. ASX, LSE), include it.
 - NEVER leave symbols empty if the user mentions ANY stock or company."""
 
@@ -161,6 +167,8 @@ class OrchestratorAgent:
         self.decision_agent = DecisionAgent()
         self.research_agent = ResearchAgent()
         self.global_market_agent = GlobalMarketAdvisorAgent()
+        self.ml_agent = MLPredictionAgent()
+        self.strategy_builder = StrategyBuilderAgent()
         
         # Advanced agents (lazy-loaded, require scipy)
         self._advanced_loaded = False
@@ -230,6 +238,10 @@ class OrchestratorAgent:
         # Step 2: Dispatch to the right handler
         if intent == "global_outlook":
             result = await self._handle_global_outlook(symbols, query)
+        elif intent == "ml_prediction" and symbols:
+            result = await self._handle_ml_prediction(symbols, query)
+        elif intent == "strategy_builder":
+            result = await self._handle_strategy_builder(symbols, query)
         elif intent == "portfolio_optimization" and symbols:
             if self._ensure_advanced_agents():
                 result = await self._handle_portfolio_optimization(symbols, query)
@@ -1094,6 +1106,87 @@ Fetched Page Content:
             "symbols": symbols,
         }
 
+    # ── ML Prediction Handler ─────────────────────────────────────────────
+    async def _handle_ml_prediction(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Run ML-based price prediction for symbols."""
+        logger.info("[%s] ML prediction for %s", self.name, symbols)
+
+        results = []
+        for symbol in symbols[:3]:
+            try:
+                prediction = await self.ml_agent.train_and_predict(symbol)
+                results.append(prediction)
+            except Exception as exc:
+                logger.error("[%s] ML prediction failed for %s: %s", self.name, symbol, exc)
+                results.append({"symbol": symbol, "error": str(exc)})
+
+        answer_parts = ["## 🤖 ML Prediction Results\n"]
+        for pred in results:
+            sym = pred.get("symbol", "?")
+            if "error" in pred:
+                answer_parts.append(f"**{sym}:** Prediction failed — {pred['error']}\n")
+                continue
+            signal = pred.get("prediction", "HOLD")
+            confidence = pred.get("confidence", 0)
+            method = pred.get("method", "unknown")
+            icon = "📈" if signal == "BUY" else ("📉" if signal == "SELL" else "⏸️")
+            answer_parts.append(
+                f"### {icon} {sym}\n"
+                f"- **Signal:** {signal} (confidence {confidence:.0%})\n"
+                f"- **Method:** {method}\n"
+            )
+            probabilities = pred.get("probabilities", {})
+            if probabilities:
+                answer_parts.append("- **Probabilities:**")
+                for label, prob in probabilities.items():
+                    answer_parts.append(f"  - {label}: {prob:.1%}")
+                answer_parts.append("")
+            features = pred.get("key_features", {})
+            if features:
+                answer_parts.append("- **Key features:** " + ", ".join(
+                    f"{k}={v:.3f}" for k, v in list(features.items())[:5]
+                ))
+            answer_parts.append("")
+
+        return {
+            "type": "ml_prediction",
+            "answer": "\n".join(answer_parts),
+            "predictions": results,
+            "symbols": symbols,
+        }
+
+    # ── Strategy Builder Handler ──────────────────────────────────────────
+    async def _handle_strategy_builder(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Handle strategy builder queries — list templates, show info."""
+        logger.info("[%s] Strategy builder query: %s", self.name, query)
+
+        templates = self.strategy_builder.get_templates()
+
+        answer_parts = [
+            "## 🛠️ Strategy Builder\n",
+            "Available strategy templates:\n",
+        ]
+        for key, tpl in templates.items():
+            answer_parts.append(
+                f"### {tpl['name']}\n"
+                f"{tpl['description']}\n"
+                f"- **Parameters:** {', '.join(tpl['parameters'].keys())}\n"
+                f"- **Entry rules:** {', '.join(tpl['entry_rules'])}\n"
+                f"- **Exit rules:** {', '.join(tpl['exit_rules'])}\n"
+            )
+
+        answer_parts.append(
+            "\n---\nTo create a strategy, use the Strategy Builder in the sidebar "
+            "or the `/api/v1/strategies` API endpoints."
+        )
+
+        return {
+            "type": "strategy_builder",
+            "answer": "\n".join(answer_parts),
+            "templates": templates,
+            "symbols": symbols,
+        }
+
     # ── Existing pipeline methods (unchanged) ─────────────────────────────
     async def analyze_symbol(self, symbol: str) -> dict[str, Any]:
         """Full pipeline analysis for a single symbol."""
@@ -1190,6 +1283,16 @@ Fetched Page Content:
                 "key_factors": [],
             }
 
+        # Phase 5: ML prediction overlay (non-blocking, adds to decision context)
+        ml_prediction = {}
+        try:
+            ml_prediction = await asyncio.wait_for(
+                self.ml_agent.train_and_predict(symbol),
+                timeout=10.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] ML prediction unavailable for %s: %s", self.name, symbol, exc)
+
         elapsed = round(time.monotonic() - start, 2)
         logger.info("[%s] Pipeline complete for %s in %.2fs", self.name, symbol, elapsed)
 
@@ -1202,6 +1305,7 @@ Fetched Page Content:
             "risk": risk_data,
             "research": research_data,
             "global_macro": global_data,
+            "ml_prediction": ml_prediction,
             "elapsed_seconds": elapsed,
         }
 

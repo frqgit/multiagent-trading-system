@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from agents.orchestrator import OrchestratorAgent
-from core.auth import FREE_TIER_PROMPT_LIMIT, get_current_user
+from core.auth import FREE_TIER_PROMPT_LIMIT, TIER_PROMPT_LIMITS, get_current_user
 from memory.db import User, _get_session_factory, save_analysis, get_history
 from memory.vector_store import vector_store
 
@@ -259,15 +259,12 @@ async def chat(req: ChatRequest, authorization: str = Header(None)):
         raise HTTPException(status_code=403, detail="Your account is pending admin approval.")
 
     # Tier limits
-    if user["tier"] == "free" and user["prompt_count"] >= FREE_TIER_PROMPT_LIMIT:
+    tier = user["tier"]
+    prompt_limit = TIER_PROMPT_LIMITS.get(tier, FREE_TIER_PROMPT_LIMIT)
+    if prompt_limit >= 0 and user["prompt_count"] >= prompt_limit:
         raise HTTPException(
             status_code=403,
-            detail=f"Free tier limit reached ({FREE_TIER_PROMPT_LIMIT} prompts). Upgrade to paid for continued access.",
-        )
-    if user["tier"] == "paid" and user["balance_usd"] <= 0:
-        raise HTTPException(
-            status_code=403,
-            detail="Your paid balance is exhausted. Please contact admin to top up.",
+            detail=f"{tier.title()} tier limit reached ({prompt_limit} prompts). Upgrade for continued access.",
         )
 
     result = await orchestrator.chat(req.message)

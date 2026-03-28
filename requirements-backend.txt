@@ -41,3 +41,9 @@ python-dotenv>=1.0,<2
 
 # Redis (optional, for distributed caching)
 redis>=5.2,<6
+
+# Stripe (billing)
+stripe>=8.0,<10
+
+# ML
+lightgbm>=4.0,<5

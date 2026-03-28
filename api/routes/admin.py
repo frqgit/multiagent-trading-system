@@ -11,7 +11,7 @@ from core.auth import (
     get_current_user,
     hash_password,
 )
-from memory.db import User, _get_session_factory
+from memory.db import User, _get_session_factory, get_audit_logs
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -33,7 +33,7 @@ async def _require_admin(authorization: str | None) -> dict:
 
 class UpdateUserRequest(BaseModel):
     is_approved: bool | None = None
-    tier: str | None = Field(None, pattern="^(free|paid)$")
+    tier: str | None = Field(None, pattern="^(free|basic|pro|enterprise)$")
     role: str | None = Field(None, pattern="^(user|admin)$")
     balance_usd: float | None = None
 
@@ -171,3 +171,58 @@ async def admin_change_password(
         user.password_hash = hash_password(req.new_password)
         await session.commit()
         return {"message": "Admin password changed successfully"}
+
+
+@router.get("/audit-logs")
+async def list_audit_logs(
+    user_id: str | None = None,
+    action: str | None = None,
+    limit: int = 50,
+    authorization: str = Header(None),
+):
+    """Retrieve audit log entries. Admin only."""
+    await _require_admin(authorization)
+    logs = await get_audit_logs(user_id=user_id, action=action, limit=min(limit, 500))
+    return {"logs": logs}
+
+
+@router.get("/trades")
+async def list_trade_records(
+    user_id: str | None = None,
+    symbol: str | None = None,
+    limit: int = 50,
+    authorization: str = Header(None),
+):
+    """Retrieve trade records. Admin only."""
+    await _require_admin(authorization)
+
+    from memory.db import TradeRecord
+    factory = _get_session_factory()
+    async with factory() as session:
+        stmt = select(TradeRecord).order_by(TradeRecord.created_at.desc()).limit(min(limit, 500))
+        if user_id:
+            stmt = stmt.where(TradeRecord.user_id == user_id)
+        if symbol:
+            stmt = stmt.where(TradeRecord.symbol == symbol.upper())
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+        return {
+            "trades": [
+                {
+                    "id": r.id,
+                    "user_id": r.user_id,
+                    "symbol": r.symbol,
+                    "action": r.action,
+                    "quantity": r.quantity,
+                    "price": r.price,
+                    "order_type": r.order_type,
+                    "mode": r.mode,
+                    "broker": r.broker,
+                    "status": r.status,
+                    "pnl": r.pnl,
+                    "commission": r.commission,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ]
+        }

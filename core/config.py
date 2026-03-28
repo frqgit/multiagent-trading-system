@@ -28,6 +28,17 @@ class Settings:
     news_api_key: str = field(default_factory=lambda: _get_env("NEWS_API_KEY", required=True))
     brave_api_key: str = field(default_factory=lambda: _get_env("BRAVE_API_KEY", ""))
 
+    # Stripe
+    stripe_secret_key: str = field(default_factory=lambda: _get_env("STRIPE_SECRET_KEY", ""))
+    stripe_publishable_key: str = field(default_factory=lambda: _get_env("STRIPE_PUBLISHABLE_KEY", ""))
+    stripe_webhook_secret: str = field(default_factory=lambda: _get_env("STRIPE_WEBHOOK_SECRET", ""))
+
+    # Interactive Brokers
+    ibkr_host: str = field(default_factory=lambda: _get_env("IBKR_HOST", "127.0.0.1"))
+    ibkr_port: int = field(default_factory=lambda: int(_get_env("IBKR_PORT", "7497")))
+    ibkr_client_id: int = field(default_factory=lambda: int(_get_env("IBKR_CLIENT_ID", "1")))
+    ibkr_mode: str = field(default_factory=lambda: _get_env("IBKR_MODE", "paper"))  # paper | live
+
     # Database
     database_url: str = field(
         default_factory=lambda: _get_env(
@@ -62,9 +73,27 @@ class Settings:
         default_factory=lambda: int(_get_env("LLM_MAX_TOKENS", "2048"))
     )
 
+    # Risk Management
+    max_loss_per_trade_pct: float = field(
+        default_factory=lambda: float(_get_env("MAX_LOSS_PER_TRADE_PCT", "2.0"))
+    )
+    daily_loss_limit_pct: float = field(
+        default_factory=lambda: float(_get_env("DAILY_LOSS_LIMIT_PCT", "5.0"))
+    )
+    max_position_pct: float = field(
+        default_factory=lambda: float(_get_env("MAX_POSITION_PCT", "10.0"))
+    )
+    auto_stop_loss_pct: float = field(
+        default_factory=lambda: float(_get_env("AUTO_STOP_LOSS_PCT", "3.0"))
+    )
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def ibkr_available(self) -> bool:
+        return bool(self.ibkr_host and self.ibkr_port)
 
 
 @lru_cache(maxsize=1)

@@ -1140,7 +1140,7 @@ def _render_admin_panel():
             col1, col2, col3 = st.columns([3, 2, 2])
             with col1:
                 role_badge = "🔧" if u["role"] == "admin" else "👤"
-                tier_color = "metric-green" if u["tier"] == "paid" else "metric-yellow"
+                tier_color = {"enterprise": "metric-green", "pro": "metric-blue", "basic": "metric-yellow"}.get(u["tier"], "metric-white")
                 approved_icon = "✅" if u["is_approved"] else "⏳"
                 st.markdown(f"""
                 <div class="agent-panel">
@@ -1154,9 +1154,10 @@ def _render_admin_panel():
                 """, unsafe_allow_html=True)
             with col2:
                 uid = u["id"][:8]
+                _tier_options = ["free", "basic", "pro", "enterprise"]
                 new_tier = st.selectbox(
-                    "Tier", ["free", "paid"],
-                    index=0 if u["tier"] == "free" else 1,
+                    "Tier", _tier_options,
+                    index=_tier_options.index(u["tier"]) if u["tier"] in _tier_options else 0,
                     key=f"tier_{uid}",
                 )
                 new_approved = st.checkbox(
@@ -1204,6 +1205,92 @@ def _render_admin_panel():
                         except Exception as e:
                             st.error(f"Failed: {e}")
             st.markdown("---")
+
+    # Audit Logs & Trades section
+    st.markdown("---")
+    admin_tab1, admin_tab2 = st.tabs(["📜 Audit Logs", "📊 Trade Records"])
+
+    with admin_tab1:
+        st.markdown("### 📜 Audit Logs")
+        al_cols = st.columns(3)
+        al_action = al_cols[0].text_input("Filter by action", value="", key="al_action", placeholder="e.g. login, order")
+        al_limit = al_cols[1].number_input("Limit", value=50, min_value=1, max_value=500, key="al_limit")
+        al_refresh = al_cols[2].button("🔄 Load Logs", key="al_refresh")
+
+        if al_refresh or True:
+            try:
+                params = {"limit": int(al_limit)}
+                if al_action:
+                    params["action"] = al_action
+                with httpx.Client(timeout=15) as client:
+                    resp = client.get(f"{API_BASE}/admin/audit-logs", params=params, headers=_auth_headers())
+                    resp.raise_for_status()
+                    logs = resp.json().get("logs", [])
+                if logs:
+                    for log in logs:
+                        ts = (log.get("created_at") or "")[:19]
+                        action_str = log.get("action", "unknown")
+                        details = log.get("details", "")
+                        ip = log.get("ip_address", "")
+                        user_id = (log.get("user_id") or "")[:8]
+                        st.markdown(f"""
+                        <div class="agent-panel" style="padding:8px 12px;margin-bottom:4px;">
+                            <span style="color:var(--accent-cyan);font-size:0.75rem;">{ts}</span> •
+                            <span style="color:var(--text-primary);font-weight:600;">{action_str}</span> •
+                            <span style="color:var(--text-muted);font-size:0.78rem;">User: {user_id}</span>
+                            {f' • <span style="color:var(--text-muted);font-size:0.72rem;">{ip}</span>' if ip else ''}
+                            <div style="color:var(--text-secondary);font-size:0.75rem;margin-top:2px;">{details[:200] if details else ''}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No audit logs found")
+            except Exception as e:
+                st.warning(f"Could not load audit logs: {e}")
+
+    with admin_tab2:
+        st.markdown("### 📊 Trade Records")
+        tr_cols = st.columns(3)
+        tr_symbol = tr_cols[0].text_input("Filter by symbol", value="", key="tr_symbol", placeholder="e.g. AAPL")
+        tr_limit = tr_cols[1].number_input("Limit", value=50, min_value=1, max_value=500, key="tr_limit")
+        tr_refresh = tr_cols[2].button("🔄 Load Trades", key="tr_refresh")
+
+        if tr_refresh or True:
+            try:
+                params = {"limit": int(tr_limit)}
+                if tr_symbol:
+                    params["symbol"] = tr_symbol.upper()
+                with httpx.Client(timeout=15) as client:
+                    resp = client.get(f"{API_BASE}/admin/trades", params=params, headers=_auth_headers())
+                    resp.raise_for_status()
+                    trades = resp.json().get("trades", [])
+                if trades:
+                    for trade in trades:
+                        ts = (trade.get("created_at") or "")[:19]
+                        sym = trade.get("symbol", "?")
+                        action_str = trade.get("action", "?")
+                        qty = trade.get("quantity", 0)
+                        price = trade.get("price", 0)
+                        status = trade.get("status", "unknown")
+                        pnl = trade.get("pnl")
+                        broker = trade.get("broker", "")
+                        mode = trade.get("mode", "")
+                        action_color = "metric-green" if action_str == "BUY" else ("metric-red" if action_str == "SELL" else "metric-yellow")
+                        pnl_str = f"P&L: ${pnl:.2f}" if pnl is not None else ""
+                        pnl_color = "color:var(--accent-green)" if pnl and pnl >= 0 else "color:var(--accent-red)"
+                        st.markdown(f"""
+                        <div class="agent-panel" style="padding:8px 12px;margin-bottom:4px;">
+                            <span style="color:var(--accent-cyan);font-size:0.75rem;">{ts}</span> •
+                            <span class="{action_color}" style="font-weight:700;">{action_str}</span>
+                            <span style="color:var(--text-primary);font-weight:600;">{sym}</span> •
+                            <span style="color:var(--text-secondary);">{qty} @ ${price:.2f}</span> •
+                            <span style="color:var(--text-muted);font-size:0.78rem;">{status} ({broker} {mode})</span>
+                            {f'<span style="{pnl_color};font-weight:600;margin-left:8px;">{pnl_str}</span>' if pnl_str else ''}
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No trade records found")
+            except Exception as e:
+                st.warning(f"Could not load trades: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -1277,6 +1364,497 @@ def _render_broker_panel():
         Australian Financial Services Licence (AFSL) requirements apply to all brokers.
     </div>
     """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Subscription / Billing Page
+# ---------------------------------------------------------------------------
+def _render_subscription_page():
+    """Render subscription management page with tier comparison and Stripe checkout."""
+    st.markdown("""
+    <div class="main-header">
+        <h1>💳 Subscription Plans</h1>
+        <p>Choose the plan that fits your trading needs</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    user = st.session_state.auth_user
+    current_tier = user.get("tier", "free")
+
+    # Tier comparison cards
+    tiers = [
+        {"name": "free", "label": "🆓 Free", "price": "$0", "period": "", "prompts": "3", "color": "#94a3b8",
+         "features": ["3 AI analysis prompts", "Basic market data", "Chat interface"]},
+        {"name": "basic", "label": "⭐ Basic", "price": "A$15", "period": "/month", "prompts": "50", "color": "#f59e0b",
+         "features": ["50 AI prompts/month", "Full market data", "News sentiment", "Technical indicators", "Email support"]},
+        {"name": "pro", "label": "💎 Pro", "price": "A$49", "period": "/month", "prompts": "500", "color": "#3b82f6",
+         "features": ["500 AI prompts/month", "ML predictions", "Strategy builder", "IBKR integration", "Backtesting", "Priority support"]},
+        {"name": "enterprise", "label": "🏆 Enterprise", "price": "A$149", "period": "/month", "prompts": "Unlimited", "color": "#8b5cf6",
+         "features": ["Unlimited prompts", "All Pro features", "Custom strategies", "API access", "Dedicated support", "Audit logs"]},
+    ]
+
+    cols = st.columns(4)
+    for col, tier in zip(cols, tiers):
+        is_current = tier["name"] == current_tier
+        border = f"2px solid {tier['color']}" if is_current else "1px solid var(--border-primary)"
+        badge = f'<div style="background:{tier["color"]};color:#fff;font-size:0.7rem;padding:2px 10px;border-radius:10px;display:inline-block;margin-bottom:8px;">CURRENT PLAN</div>' if is_current else ""
+        features_html = "".join(f'<div style="color:var(--text-secondary);font-size:0.78rem;padding:3px 0;">✓ {f}</div>' for f in tier["features"])
+        col.markdown(f"""
+        <div style="background:var(--bg-card);border:{border};border-radius:12px;padding:20px;text-align:center;min-height:380px;">
+            {badge}
+            <div style="font-size:1.2rem;margin-bottom:4px;">{tier['label']}</div>
+            <div style="color:{tier['color']};font-size:1.8rem;font-weight:800;">{tier['price']}<span style="font-size:0.8rem;font-weight:400;">{tier['period']}</span></div>
+            <div style="color:var(--text-muted);font-size:0.75rem;margin-bottom:12px;">{tier['prompts']} prompts</div>
+            <div style="text-align:left;padding:0 8px;">{features_html}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Upgrade / manage buttons
+    if current_tier == "free":
+        st.markdown("### 🚀 Upgrade Your Plan")
+        upgrade_cols = st.columns(3)
+        for col, tier_name, label in zip(upgrade_cols, ["basic", "pro", "enterprise"], ["⭐ Basic - A$15/mo", "💎 Pro - A$49/mo", "🏆 Enterprise - A$149/mo"]):
+            if col.button(label, key=f"upgrade_{tier_name}", use_container_width=True):
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.post(f"{API_BASE}/billing/checkout",
+                                           json={"tier": tier_name},
+                                           headers=_auth_headers())
+                        resp.raise_for_status()
+                        data = resp.json()
+                        checkout_url = data.get("checkout_url", "")
+                        if checkout_url:
+                            st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
+                            st.info(f"Redirecting to Stripe checkout... [Click here if not redirected]({checkout_url})")
+                        else:
+                            st.error("Could not create checkout session")
+                except Exception as e:
+                    st.error(f"Checkout error: {e}")
+    else:
+        st.markdown("### 📋 Manage Subscription")
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            if st.button("📋 Manage Billing (Stripe Portal)", use_container_width=True):
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.post(f"{API_BASE}/billing/portal", headers=_auth_headers())
+                        resp.raise_for_status()
+                        data = resp.json()
+                        portal_url = data.get("portal_url", "")
+                        if portal_url:
+                            st.markdown(f'<meta http-equiv="refresh" content="0;url={portal_url}">', unsafe_allow_html=True)
+                            st.info(f"Redirecting to Stripe portal... [Click here if not redirected]({portal_url})")
+                        else:
+                            st.error("Could not create portal session")
+                except Exception as e:
+                    st.error(f"Portal error: {e}")
+        with mc2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Current Plan</div>
+                <div class="metric-value metric-blue">{current_tier.upper()}</div>
+                <div class="metric-sub">{user.get('prompt_count', 0)} prompts used</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# IBKR Integration Page
+# ---------------------------------------------------------------------------
+def _render_ibkr_page():
+    """Render Interactive Brokers connection and trading page."""
+    st.markdown("""
+    <div class="main-header">
+        <h1>🔗 Interactive Brokers</h1>
+        <p>Connect to IBKR TWS/Gateway for live and paper trading</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    user = st.session_state.auth_user
+    user_tier = user.get("tier", "free")
+    if user_tier not in ("pro", "enterprise"):
+        st.warning("⚠️ IBKR integration requires a Pro or Enterprise subscription.")
+        if st.button("💎 Upgrade to Pro", use_container_width=True):
+            st.session_state.active_page = "subscription"
+            st.rerun()
+        return
+
+    # Connection status
+    try:
+        with httpx.Client(timeout=10) as client:
+            status = client.get(f"{API_BASE}/ibkr/status", headers=_auth_headers()).json()
+        connected = status.get("connected", False)
+        mode = status.get("mode", "paper")
+    except Exception:
+        connected = False
+        mode = "paper"
+
+    st1, st2, st3 = st.columns(3)
+    st1.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">Connection</div>
+        <div class="metric-value {'metric-green' if connected else 'metric-red'}">{'🟢 Connected' if connected else '🔴 Disconnected'}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st2.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">Mode</div>
+        <div class="metric-value metric-blue">{mode.upper()}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st3.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">Plan</div>
+        <div class="metric-value metric-yellow">{user_tier.upper()}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Connect / Disconnect
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        if not connected:
+            if st.button("🔌 Connect to IBKR", use_container_width=True, type="primary"):
+                with st.spinner("Connecting to IBKR TWS/Gateway..."):
+                    try:
+                        with httpx.Client(timeout=30) as client:
+                            resp = client.post(f"{API_BASE}/ibkr/connect", headers=_auth_headers())
+                            resp.raise_for_status()
+                            result = resp.json()
+                        if result.get("connected"):
+                            st.success("✅ Connected to IBKR!")
+                            st.rerun()
+                        else:
+                            st.error(f"Connection failed: {result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
+        else:
+            if st.button("⛔ Disconnect", use_container_width=True):
+                try:
+                    with httpx.Client(timeout=10) as client:
+                        client.post(f"{API_BASE}/ibkr/disconnect", headers=_auth_headers())
+                    st.success("Disconnected")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    with cc2:
+        st.markdown("""
+        <div class="agent-panel">
+            <p style="font-size:0.82rem;">
+                <strong>Setup:</strong> IBKR TWS or Gateway must be running with API enabled.<br>
+                • Paper trading: port 7497<br>
+                • Live trading: port 7496<br>
+                • Enable "Allow connections from localhost" in TWS API settings
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    if not connected:
+        return
+
+    st.markdown("---")
+
+    # Tabs for different IBKR functions
+    ibkr_tab1, ibkr_tab2, ibkr_tab3, ibkr_tab4 = st.tabs(["📊 Positions", "📝 Place Order", "📈 Market Data", "💰 Account"])
+
+    with ibkr_tab1:
+        if st.button("🔄 Refresh Positions", key="refresh_pos"):
+            pass
+        try:
+            with httpx.Client(timeout=15) as client:
+                pos_resp = client.get(f"{API_BASE}/ibkr/positions", headers=_auth_headers())
+                pos_resp.raise_for_status()
+                positions = pos_resp.json().get("positions", [])
+            if positions:
+                for pos in positions:
+                    symbol = pos.get("symbol", "?")
+                    qty = pos.get("quantity", 0)
+                    avg_cost = pos.get("avg_cost", 0)
+                    value = pos.get("value", 0)
+                    pnl = pos.get("unrealized_pnl", 0)
+                    pnl_color = "metric-green" if pnl >= 0 else "metric-red"
+                    pcols = st.columns(5)
+                    pcols[0].markdown(f'<div class="metric-card"><div class="metric-label">Symbol</div><div class="metric-value metric-blue">{symbol}</div></div>', unsafe_allow_html=True)
+                    pcols[1].markdown(f'<div class="metric-card"><div class="metric-label">Quantity</div><div class="metric-value metric-white">{qty}</div></div>', unsafe_allow_html=True)
+                    pcols[2].markdown(f'<div class="metric-card"><div class="metric-label">Avg Cost</div><div class="metric-value metric-white">${avg_cost:.2f}</div></div>', unsafe_allow_html=True)
+                    pcols[3].markdown(f'<div class="metric-card"><div class="metric-label">Value</div><div class="metric-value metric-white">${value:.2f}</div></div>', unsafe_allow_html=True)
+                    pcols[4].markdown(f'<div class="metric-card"><div class="metric-label">P&L</div><div class="metric-value {pnl_color}">${pnl:.2f}</div></div>', unsafe_allow_html=True)
+            else:
+                st.info("No open positions")
+        except Exception as e:
+            st.warning(f"Could not load positions: {e}")
+
+    with ibkr_tab2:
+        with st.form("ibkr_order_form"):
+            ocols = st.columns(4)
+            order_symbol = ocols[0].text_input("Symbol", value="AAPL")
+            order_action = ocols[1].selectbox("Action", ["BUY", "SELL"])
+            order_qty = ocols[2].number_input("Quantity", min_value=1, value=10)
+            order_type = ocols[3].selectbox("Order Type", ["MKT", "LMT", "STP", "STP_LMT"])
+            price_cols = st.columns(2)
+            order_price = price_cols[0].number_input("Limit Price", min_value=0.0, value=0.0, step=0.01)
+            order_stop = price_cols[1].number_input("Stop Price", min_value=0.0, value=0.0, step=0.01)
+            submitted = st.form_submit_button("📤 Submit Order", use_container_width=True, type="primary")
+            if submitted:
+                order_payload = {
+                    "symbol": order_symbol.upper(),
+                    "action": order_action,
+                    "quantity": int(order_qty),
+                    "order_type": order_type,
+                }
+                if order_price > 0:
+                    order_payload["limit_price"] = order_price
+                if order_stop > 0:
+                    order_payload["stop_price"] = order_stop
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.post(f"{API_BASE}/ibkr/order", json=order_payload, headers=_auth_headers())
+                        resp.raise_for_status()
+                        result = resp.json()
+                    if result.get("order_id"):
+                        st.success(f"✅ Order placed! ID: {result['order_id']}")
+                    else:
+                        st.error(f"Order failed: {result.get('error', 'Unknown')}")
+                except httpx.HTTPStatusError as exc:
+                    try:
+                        detail = exc.response.json().get("detail", str(exc))
+                    except Exception:
+                        detail = str(exc)
+                    st.error(f"Order rejected: {detail}")
+                except Exception as e:
+                    st.error(f"Order error: {e}")
+
+    with ibkr_tab3:
+        md_symbol = st.text_input("Symbol for market data", value="AAPL", key="ibkr_md_symbol")
+        if st.button("📊 Get Market Data", key="ibkr_md_btn"):
+            try:
+                with httpx.Client(timeout=15) as client:
+                    resp = client.get(f"{API_BASE}/ibkr/market-data/{md_symbol.upper()}", headers=_auth_headers())
+                    resp.raise_for_status()
+                    md = resp.json()
+                mcols = st.columns(4)
+                mcols[0].markdown(f'<div class="metric-card"><div class="metric-label">Last</div><div class="metric-value metric-blue">${md.get("last", "N/A")}</div></div>', unsafe_allow_html=True)
+                mcols[1].markdown(f'<div class="metric-card"><div class="metric-label">Bid</div><div class="metric-value metric-green">${md.get("bid", "N/A")}</div></div>', unsafe_allow_html=True)
+                mcols[2].markdown(f'<div class="metric-card"><div class="metric-label">Ask</div><div class="metric-value metric-red">${md.get("ask", "N/A")}</div></div>', unsafe_allow_html=True)
+                mcols[3].markdown(f'<div class="metric-card"><div class="metric-label">Volume</div><div class="metric-value metric-white">{md.get("volume", "N/A"):,}</div></div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with ibkr_tab4:
+        if st.button("🔄 Refresh Account", key="refresh_acct"):
+            pass
+        try:
+            with httpx.Client(timeout=15) as client:
+                acct = client.get(f"{API_BASE}/ibkr/account", headers=_auth_headers()).json()
+            summary = acct.get("summary", {})
+            acols = st.columns(3)
+            acols[0].markdown(f'<div class="metric-card"><div class="metric-label">Net Liquidation</div><div class="metric-value metric-green">${summary.get("NetLiquidation", "N/A")}</div></div>', unsafe_allow_html=True)
+            acols[1].markdown(f'<div class="metric-card"><div class="metric-label">Buying Power</div><div class="metric-value metric-blue">${summary.get("BuyingPower", "N/A")}</div></div>', unsafe_allow_html=True)
+            acols[2].markdown(f'<div class="metric-card"><div class="metric-label">Cash Balance</div><div class="metric-value metric-yellow">${summary.get("TotalCashValue", "N/A")}</div></div>', unsafe_allow_html=True)
+            # P&L
+            try:
+                pnl_resp = httpx.Client(timeout=10).get(f"{API_BASE}/ibkr/pnl", headers=_auth_headers())
+                pnl_data = pnl_resp.json()
+                daily_pnl = pnl_data.get("daily_pnl", 0)
+                total_pnl = pnl_data.get("total_unrealized_pnl", 0)
+                pcols = st.columns(2)
+                pcols[0].markdown(f'<div class="metric-card"><div class="metric-label">Daily P&L</div><div class="metric-value {"metric-green" if daily_pnl >= 0 else "metric-red"}">${daily_pnl:.2f}</div></div>', unsafe_allow_html=True)
+                pcols[1].markdown(f'<div class="metric-card"><div class="metric-label">Unrealized P&L</div><div class="metric-value {"metric-green" if total_pnl >= 0 else "metric-red"}">${total_pnl:.2f}</div></div>', unsafe_allow_html=True)
+            except Exception:
+                pass
+        except Exception as e:
+            st.warning(f"Could not load account: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Strategy Builder Page
+# ---------------------------------------------------------------------------
+def _render_strategy_page():
+    """Render strategy builder and backtesting page."""
+    st.markdown("""
+    <div class="main-header">
+        <h1>⚙️ Strategy Builder</h1>
+        <p>Build, backtest, and manage your trading strategies</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_build, tab_backtest, tab_my = st.tabs(["🔧 Build Strategy", "📈 Backtest", "📋 My Strategies"])
+
+    with tab_build:
+        # Load templates
+        templates = {}
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(f"{API_BASE}/strategies/templates", headers=_auth_headers())
+                resp.raise_for_status()
+                templates = resp.json().get("templates", {})
+        except Exception:
+            st.warning("Could not load strategy templates")
+
+        if templates:
+            template_names = list(templates.keys())
+            selected = st.selectbox("Strategy Template", template_names, key="strat_template")
+            tmpl = templates.get(selected, {})
+
+            st.markdown(f"""
+            <div class="agent-panel">
+                <h4>{tmpl.get('name', selected)}</h4>
+                <p>{tmpl.get('description', '')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Parameter inputs
+            st.markdown("#### Parameters")
+            params = {}
+            default_params = tmpl.get("default_params", {})
+            param_cols = st.columns(min(len(default_params), 3) or 1)
+            for i, (pname, pval) in enumerate(default_params.items()):
+                col = param_cols[i % len(param_cols)]
+                if isinstance(pval, float):
+                    params[pname] = col.number_input(pname.replace("_", " ").title(), value=pval, step=0.1, key=f"sp_{pname}")
+                elif isinstance(pval, int):
+                    params[pname] = col.number_input(pname.replace("_", " ").title(), value=pval, step=1, key=f"sp_{pname}")
+                else:
+                    params[pname] = col.text_input(pname.replace("_", " ").title(), value=str(pval), key=f"sp_{pname}")
+
+            strat_name = st.text_input("Strategy Name", value=f"My {tmpl.get('name', selected)}", key="strat_name")
+
+            if st.button("💾 Save Strategy", use_container_width=True, type="primary"):
+                try:
+                    with httpx.Client(timeout=15) as client:
+                        resp = client.post(f"{API_BASE}/strategies/", json={
+                            "name": strat_name,
+                            "strategy_type": selected,
+                            "parameters": params,
+                        }, headers=_auth_headers())
+                        resp.raise_for_status()
+                    st.success(f"✅ Strategy '{strat_name}' saved!")
+                except httpx.HTTPStatusError as exc:
+                    try:
+                        detail = exc.response.json().get("detail", str(exc))
+                    except Exception:
+                        detail = str(exc)
+                    st.error(f"Error: {detail}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with tab_backtest:
+        st.markdown("#### Backtest a Strategy")
+        bt_cols = st.columns(3)
+        bt_symbol = bt_cols[0].text_input("Symbol", value="AAPL", key="bt_symbol")
+        bt_period = bt_cols[1].selectbox("Period", ["3mo", "6mo", "1y", "2y", "5y"], index=2, key="bt_period")
+
+        # Strategy type for backtest
+        bt_strat_type = bt_cols[2].selectbox("Strategy", [
+            "ma_crossover", "rsi_mean_reversion", "bollinger_breakout",
+            "macd_signal", "momentum_trend", "combined_multi_indicator"
+        ], key="bt_strat_type")
+
+        bt_params = {}
+        bt_defaults = {
+            "ma_crossover": {"short_window": 10, "long_window": 30},
+            "rsi_mean_reversion": {"rsi_period": 14, "oversold": 30.0, "overbought": 70.0},
+            "bollinger_breakout": {"bb_period": 20, "bb_std": 2.0},
+            "macd_signal": {"fast": 12, "slow": 26, "signal": 9},
+            "momentum_trend": {"momentum_period": 20, "ma_period": 50},
+            "combined_multi_indicator": {"rsi_period": 14, "bb_period": 20, "macd_fast": 12},
+        }
+        defaults = bt_defaults.get(bt_strat_type, {})
+        if defaults:
+            pcols = st.columns(min(len(defaults), 3))
+            for i, (pname, pval) in enumerate(defaults.items()):
+                col = pcols[i % len(pcols)]
+                if isinstance(pval, float):
+                    bt_params[pname] = col.number_input(pname.replace("_", " ").title(), value=pval, step=0.1, key=f"btp_{pname}")
+                else:
+                    bt_params[pname] = col.number_input(pname.replace("_", " ").title(), value=pval, step=1, key=f"btp_{pname}")
+
+        if st.button("🚀 Run Backtest", use_container_width=True, type="primary"):
+            with st.spinner("Running backtest..."):
+                try:
+                    with httpx.Client(timeout=60) as client:
+                        resp = client.post(f"{API_BASE}/strategies/backtest", json={
+                            "strategy_type": bt_strat_type,
+                            "parameters": bt_params,
+                            "symbol": bt_symbol.upper(),
+                            "period": bt_period,
+                        }, headers=_auth_headers())
+                        resp.raise_for_status()
+                        bt_result = resp.json()
+
+                    results = bt_result.get("results", {})
+                    # Summary metrics
+                    rc = st.columns(5)
+                    total_ret = results.get("total_return_pct", 0)
+                    rc[0].markdown(f'<div class="metric-card"><div class="metric-label">Total Return</div><div class="metric-value {"metric-green" if total_ret >= 0 else "metric-red"}">{total_ret:.1f}%</div></div>', unsafe_allow_html=True)
+                    rc[1].markdown(f'<div class="metric-card"><div class="metric-label">Win Rate</div><div class="metric-value metric-blue">{results.get("win_rate", 0):.1f}%</div></div>', unsafe_allow_html=True)
+                    rc[2].markdown(f'<div class="metric-card"><div class="metric-label">Sharpe Ratio</div><div class="metric-value metric-yellow">{results.get("sharpe_ratio", 0):.2f}</div></div>', unsafe_allow_html=True)
+                    rc[3].markdown(f'<div class="metric-card"><div class="metric-label">Max Drawdown</div><div class="metric-value metric-red">{results.get("max_drawdown_pct", 0):.1f}%</div></div>', unsafe_allow_html=True)
+                    rc[4].markdown(f'<div class="metric-card"><div class="metric-label">Trades</div><div class="metric-value metric-white">{results.get("total_trades", 0)}</div></div>', unsafe_allow_html=True)
+
+                    # Equity curve
+                    equity = results.get("equity_curve", [])
+                    if equity:
+                        import pandas as pd
+                        eq_df = pd.DataFrame(equity)
+                        if "date" in eq_df.columns and "equity" in eq_df.columns:
+                            eq_df["date"] = pd.to_datetime(eq_df["date"])
+                            eq_df = eq_df.sort_values("date")
+                            st.markdown("#### 📈 Equity Curve")
+                            st.line_chart(eq_df.set_index("date")["equity"], use_container_width=True)
+
+                    # More details
+                    with st.expander("📊 Detailed Results"):
+                        st.json(results)
+
+                except httpx.HTTPStatusError as exc:
+                    try:
+                        detail = exc.response.json().get("detail", str(exc))
+                    except Exception:
+                        detail = str(exc)
+                    st.error(f"Backtest error: {detail}")
+                except Exception as e:
+                    st.error(f"Backtest error: {e}")
+
+    with tab_my:
+        if st.button("🔄 Refresh Strategies", key="refresh_strats"):
+            pass
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(f"{API_BASE}/strategies/", headers=_auth_headers())
+                resp.raise_for_status()
+                strategies = resp.json().get("strategies", [])
+            if strategies:
+                for strat in strategies:
+                    s_name = strat.get("name", "Unnamed")
+                    s_type = strat.get("strategy_type", "unknown")
+                    s_active = "🟢 Active" if strat.get("is_active") else "⚪ Inactive"
+                    s_created = (strat.get("created_at") or "")[:10]
+                    st.markdown(f"""
+                    <div class="agent-panel">
+                        <h4>{s_name} <span style="color:var(--text-muted);font-size:0.8rem;">({s_type})</span></h4>
+                        <p>{s_active} • Created: {s_created}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    s_cols = st.columns([3, 1])
+                    with s_cols[0]:
+                        params_display = strat.get("parameters", {})
+                        if params_display:
+                            st.caption(f"Parameters: {params_display}")
+                    with s_cols[1]:
+                        if st.button("🗑️ Delete", key=f"del_strat_{strat.get('id', '')}"):
+                            try:
+                                with httpx.Client(timeout=10) as client:
+                                    client.delete(f"{API_BASE}/strategies/{strat['id']}", headers=_auth_headers())
+                                st.success("Deleted")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+            else:
+                st.info("No saved strategies yet. Build one in the 'Build Strategy' tab!")
+        except Exception as e:
+            st.warning(f"Could not load strategies: {e}")
 
 
 def _render_landing_page():
@@ -1405,12 +1983,20 @@ def _render_landing_page():
             <div style="color:var(--text-secondary);font-size:0.82rem;margin:8px 0;line-height:1.6;">
                 <div style="display:flex;gap:24px;flex-wrap:wrap;">
                     <div>
-                        <strong style="color:var(--accent-cyan);">🆓 Free Tier</strong><br>
-                        3 AI analysis prompts to explore the platform
+                        <strong style="color:var(--accent-cyan);">🆓 Free</strong><br>
+                        3 AI analysis prompts
                     </div>
                     <div>
-                        <strong style="color:var(--accent-green);">💎 Paid Tier — A$15/month</strong><br>
-                        Unlimited prompts • Priority AI processing • Advanced agents
+                        <strong style="color:#f59e0b;">⭐ Basic — A$15/mo</strong><br>
+                        50 prompts • News & technicals
+                    </div>
+                    <div>
+                        <strong style="color:#3b82f6;">💎 Pro — A$49/mo</strong><br>
+                        500 prompts • ML • IBKR • Backtesting
+                    </div>
+                    <div>
+                        <strong style="color:#8b5cf6;">🏆 Enterprise — A$149/mo</strong><br>
+                        Unlimited • API access • Priority support
                     </div>
                 </div>
             </div>
@@ -1653,12 +2239,20 @@ def _render_landing_page():
             <div style="color:var(--text-secondary);font-size:0.82rem;margin:8px 0;line-height:1.6;">
                 <div style="display:flex;gap:24px;flex-wrap:wrap;">
                     <div>
-                        <strong style="color:var(--accent-cyan);">🆓 Free Tier</strong><br>
-                        3 AI analysis prompts to explore the platform
+                        <strong style="color:var(--accent-cyan);">🆓 Free</strong><br>
+                        3 AI analysis prompts
                     </div>
                     <div>
-                        <strong style="color:var(--accent-green);">💎 Paid Tier — A$15/month</strong><br>
-                        Unlimited prompts • Priority AI processing • Advanced agents
+                        <strong style="color:#f59e0b;">⭐ Basic — A$15/mo</strong><br>
+                        50 prompts • News & technicals
+                    </div>
+                    <div>
+                        <strong style="color:#3b82f6;">💎 Pro — A$49/mo</strong><br>
+                        500 prompts • ML • IBKR • Backtesting
+                    </div>
+                    <div>
+                        <strong style="color:#8b5cf6;">🏆 Enterprise — A$149/mo</strong><br>
+                        Unlimited • API access • Priority support
                     </div>
                 </div>
             </div>
@@ -1721,7 +2315,10 @@ with st.sidebar:
     st.divider()
 
     # ── User info ──
-    tier_label = "💎 PAID" if user["tier"] == "paid" else "🆓 FREE"
+    _tier_labels = {"free": "🆓 FREE", "basic": "⭐ BASIC", "pro": "💎 PRO", "enterprise": "🏆 ENTERPRISE"}
+    _tier_limits = {"free": 3, "basic": 50, "pro": 500, "enterprise": -1}
+    tier_label = _tier_labels.get(user["tier"], "🆓 FREE")
+    tier_limit = _tier_limits.get(user["tier"], 3)
     st.markdown(f"""
     <div class="metric-card" style="margin-bottom:12px">
         <div class="metric-label">Signed In As</div>
@@ -1730,26 +2327,24 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    if user["tier"] == "free":
-        remaining = max(0, 3 - user["prompt_count"])
-        bar_pct = min(100, (user["prompt_count"] / 3) * 100)
-        bar_color = "var(--accent-green)" if remaining > 1 else ("var(--accent-yellow)" if remaining == 1 else "var(--accent-red)")
+    if tier_limit > 0:
+        remaining = max(0, tier_limit - user["prompt_count"])
+        bar_pct = min(100, (user["prompt_count"] / tier_limit) * 100)
+        bar_color = "var(--accent-green)" if remaining > (tier_limit * 0.3) else ("var(--accent-yellow)" if remaining > (tier_limit * 0.1) else "var(--accent-red)")
         st.markdown(f"""
         <div style="margin-bottom:12px">
-            <div style="color:var(--text-muted);font-size:0.72rem;margin-bottom:4px">Free Prompts: {remaining}/3 remaining</div>
+            <div style="color:var(--text-muted);font-size:0.72rem;margin-bottom:4px">Prompts: {remaining}/{tier_limit} remaining</div>
             <div class="risk-bar-bg"><div class="risk-bar" style="width:{bar_pct}%;background:{bar_color}"></div></div>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
-        <div class="metric-card" style="margin-bottom:12px">
-            <div class="metric-label">Balance (AUD)</div>
-            <div class="metric-value {'metric-green' if user['balance_usd'] > 2 else 'metric-red'}">A${user['balance_usd']:.4f}</div>
-            <div class="metric-sub">of A$15.00 subscription</div>
+        <div style="margin-bottom:12px">
+            <div style="color:var(--accent-green);font-size:0.72rem;">✅ Unlimited prompts</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Navigation buttons
+    # Navigation buttons - row 1
     nav_cols = st.columns(3)
     if nav_cols[0].button("📊 Advisory", use_container_width=True,
                           help="AI Trading Advisory"):
@@ -1763,16 +2358,37 @@ with st.sidebar:
         st.session_state.show_admin = False
         st.session_state.show_brokers = True
         st.rerun()
+    if nav_cols[2].button("💳 Plans", use_container_width=True,
+                          help="Subscription Plans"):
+        st.session_state.active_page = "subscription"
+        st.session_state.show_admin = False
+        st.session_state.show_brokers = False
+        st.rerun()
+
+    # Navigation buttons - row 2
+    nav_cols2 = st.columns(3)
+    if nav_cols2[0].button("🔗 IBKR", use_container_width=True,
+                           help="Interactive Brokers"):
+        st.session_state.active_page = "ibkr"
+        st.session_state.show_admin = False
+        st.session_state.show_brokers = False
+        st.rerun()
+    if nav_cols2[1].button("⚙️ Strategies", use_container_width=True,
+                           help="Strategy Builder"):
+        st.session_state.active_page = "strategies"
+        st.session_state.show_admin = False
+        st.session_state.show_brokers = False
+        st.rerun()
 
     btn_cols_extra = []
     if user["role"] == "admin":
-        if nav_cols[2].button("🔧 Admin", use_container_width=True):
+        if nav_cols2[2].button("🔧 Admin", use_container_width=True):
             st.session_state.show_admin = not st.session_state.show_admin
             st.session_state.show_brokers = False
             st.session_state.active_page = "admin"
             st.rerun()
     else:
-        if nav_cols[2].button("🚪 Logout", use_container_width=True):
+        if nav_cols2[2].button("🚪 Logout", use_container_width=True):
             st.session_state.auth_token = None
             st.session_state.auth_user = None
             st.session_state.messages = []
@@ -1905,6 +2521,12 @@ if st.session_state.show_admin and user["role"] == "admin":
     _render_admin_panel()
 elif st.session_state.show_brokers:
     _render_broker_panel()
+elif st.session_state.active_page == "subscription":
+    _render_subscription_page()
+elif st.session_state.active_page == "ibkr":
+    _render_ibkr_page()
+elif st.session_state.active_page == "strategies":
+    _render_strategy_page()
 else:
     # ---------------------------------------------------------------------------
     # Main area — AI Advisory Chat + Dashboard hybrid

@@ -1,4 +1,12 @@
-"""Risk Manager Agent — evaluates risk factors and adds constraints."""
+"""Risk Manager Agent — evaluates risk factors and adds constraints.
+
+Enhanced with:
+- Configurable risk thresholds from settings
+- Daily loss limit tracking
+- Auto-stop trading when limits exceeded
+- Position sizing constraints
+- Trade-level max loss enforcement
+"""
 
 from __future__ import annotations
 
@@ -9,7 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 class RiskManagerAgent:
-    """Evaluates volatility, RSI, beta, MACD, 52-week position, and sentiment to constrain trading decisions."""
+    """Evaluates volatility, RSI, beta, MACD, 52-week position, and sentiment to constrain trading decisions.
+
+    Enhanced with configurable risk management:
+    - max_loss_per_trade_pct: Maximum loss allowed per individual trade
+    - daily_loss_limit_pct: Maximum daily portfolio loss before auto-stop
+    - max_position_pct: Maximum portfolio allocation per position
+    - auto_stop_loss_pct: Automatic stop-loss percentage for all positions
+    """
 
     name = "RiskManagerAgent"
 
@@ -18,6 +33,64 @@ class RiskManagerAgent:
     HIGH_VOLATILITY_THRESHOLD = 40
     HIGH_BETA_THRESHOLD = 1.5
     MAX_RISK_SCORE = 10
+
+    def __init__(self):
+        self._daily_pnl: float = 0.0  # Tracks daily P&L as percentage
+        self._trading_halted: bool = False
+        self._halt_reason: str = ""
+
+        # Load configurable limits from settings
+        try:
+            from core.config import get_settings
+            settings = get_settings()
+            self.max_loss_per_trade_pct = settings.max_loss_per_trade_pct
+            self.daily_loss_limit_pct = settings.daily_loss_limit_pct
+            self.max_position_pct = settings.max_position_pct
+            self.auto_stop_loss_pct = settings.auto_stop_loss_pct
+        except Exception:
+            self.max_loss_per_trade_pct = 2.0
+            self.daily_loss_limit_pct = 5.0
+            self.max_position_pct = 10.0
+            self.auto_stop_loss_pct = 3.0
+
+    def update_daily_pnl(self, pnl_pct: float) -> None:
+        """Update the running daily P&L. Call after each trade closes."""
+        self._daily_pnl += pnl_pct
+        if self._daily_pnl <= -self.daily_loss_limit_pct:
+            self._trading_halted = True
+            self._halt_reason = (
+                f"Daily loss limit reached: {self._daily_pnl:.2f}% "
+                f"(limit: -{self.daily_loss_limit_pct:.1f}%)"
+            )
+            logger.warning("[%s] TRADING HALTED — %s", self.name, self._halt_reason)
+
+    def reset_daily(self) -> None:
+        """Reset daily tracking counters (call at start of each trading day)."""
+        self._daily_pnl = 0.0
+        self._trading_halted = False
+        self._halt_reason = ""
+
+    @property
+    def is_trading_halted(self) -> bool:
+        return self._trading_halted
+
+    def get_position_size_limit(self, portfolio_value: float, current_price: float) -> dict[str, Any]:
+        """Calculate maximum position size based on risk limits."""
+        max_value = portfolio_value * (self.max_position_pct / 100)
+        max_shares = int(max_value / current_price) if current_price > 0 else 0
+        stop_loss_price = current_price * (1 - self.auto_stop_loss_pct / 100)
+        risk_per_share = current_price - stop_loss_price
+        max_risk_value = portfolio_value * (self.max_loss_per_trade_pct / 100)
+        risk_based_shares = int(max_risk_value / risk_per_share) if risk_per_share > 0 else max_shares
+        recommended = min(max_shares, risk_based_shares)
+        return {
+            "max_shares_by_position_limit": max_shares,
+            "max_shares_by_risk_limit": risk_based_shares,
+            "recommended_shares": recommended,
+            "max_position_value": round(max_value, 2),
+            "auto_stop_loss_price": round(stop_loss_price, 2),
+            "max_loss_per_trade": round(max_risk_value, 2),
+        }
 
     async def analyze(self, market_data: dict[str, Any], sentiment_data: dict[str, Any], global_macro: dict[str, Any] | None = None) -> dict[str, Any]:
         symbol = market_data.get("symbol", "UNKNOWN")
@@ -170,12 +243,39 @@ class RiskManagerAgent:
         risk_score = min(risk_score, self.MAX_RISK_SCORE)
         risk_level = "low" if risk_score <= 3 else ("medium" if risk_score <= 6 else "high")
 
+        # --- Auto-stop trading check ---
+        allow_buy = risk_score < 7
+        if self._trading_halted:
+            allow_buy = False
+            warnings.append(f"⛔ TRADING HALTED: {self._halt_reason}")
+            constraints.append("All new positions blocked — daily loss limit hit")
+
+        # --- Position sizing constraints ---
+        price = market_data.get("price", 0)
+        position_limits = {}
+        if price > 0:
+            position_limits = {
+                "max_position_pct": self.max_position_pct,
+                "max_loss_per_trade_pct": self.max_loss_per_trade_pct,
+                "auto_stop_loss_pct": self.auto_stop_loss_pct,
+                "auto_stop_loss_price": round(price * (1 - self.auto_stop_loss_pct / 100), 2),
+            }
+
         return {
             "symbol": symbol,
             "risk_score": risk_score,
             "risk_level": risk_level,
             "warnings": warnings,
             "constraints": constraints,
-            "allow_buy": risk_score < 7,
+            "allow_buy": allow_buy,
             "allow_sell": True,
+            "trading_halted": self._trading_halted,
+            "daily_pnl_pct": round(self._daily_pnl, 2),
+            "risk_limits": {
+                "max_loss_per_trade_pct": self.max_loss_per_trade_pct,
+                "daily_loss_limit_pct": self.daily_loss_limit_pct,
+                "max_position_pct": self.max_position_pct,
+                "auto_stop_loss_pct": self.auto_stop_loss_pct,
+            },
+            "position_limits": position_limits,
         }
