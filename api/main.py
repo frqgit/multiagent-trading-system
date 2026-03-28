@@ -62,10 +62,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow Streamlit and local dev
+# CORS — restrict to known Streamlit and local origins
+_allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+] or [
+    "http://localhost:8501",
+    "http://127.0.0.1:8501",
+    "https://*.streamlit.app",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.streamlit\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

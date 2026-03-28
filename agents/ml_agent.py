@@ -185,9 +185,17 @@ class MLPredictionAgent:
         self._feature_names = list(self._compute_features(prices[:61]).keys()) if len(prices) >= 61 else []
         return np.array(X_rows), np.array(y_rows)
 
-    async def train_and_predict(self, symbol: str, prices: list[float],
+    async def train_and_predict(self, symbol: str, prices: list[float] | None = None,
                                  volumes: list[float] | None = None) -> dict[str, Any]:
-        """Train LightGBM on historical data and predict the current signal."""
+        """Train LightGBM on historical data and predict the current signal.
+
+        If *prices* is not provided, fetches 6 months of data via yfinance.
+        """
+        if prices is None:
+            prices, volumes = await self._fetch_prices(symbol)
+            if prices is None:
+                return {"symbol": symbol, "error": "Could not fetch price history", "ml_available": False}
+
         if not _ensure_lgb():
             return await self._rule_based_predict(symbol, prices, volumes)
 
@@ -291,6 +299,26 @@ class MLPredictionAgent:
             "feature_importance": dict(list(feat_importance.items())[:10]),
             "model_type": "LightGBM",
         }
+
+    @staticmethod
+    async def _fetch_prices(symbol: str) -> tuple[list[float] | None, list[float] | None]:
+        """Fetch 6 months of daily close prices via yfinance."""
+        try:
+            import yfinance as yf
+
+            def _download():
+                tk = yf.Ticker(symbol)
+                df = tk.history(period="6mo", interval="1d")
+                if df.empty:
+                    return None, None
+                closes = df["Close"].dropna().tolist()
+                volumes = df["Volume"].dropna().tolist() if "Volume" in df.columns else None
+                return closes, volumes
+
+            return await asyncio.to_thread(_download)
+        except Exception as exc:
+            logger.warning("Failed to fetch prices for %s: %s", symbol, exc)
+            return None, None
 
     async def _rule_based_predict(self, symbol: str, prices: list[float],
                                    volumes: list[float] | None) -> dict[str, Any]:
