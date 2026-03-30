@@ -6,7 +6,7 @@ import datetime
 import uuid
 from typing import AsyncGenerator
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Numeric, String, Text, JSON
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Numeric, String, Text, JSON, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -176,10 +176,18 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Create all tables."""
+    """Create all tables and migrate missing columns on existing tables."""
     engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Migrate: add columns that may be missing on an older `users` table.
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255)",
+        ]
+        for stmt in migrations:
+            await conn.execute(sa_text(stmt))
 
 
 async def seed_admin() -> None:
