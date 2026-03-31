@@ -455,9 +455,10 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
         summaries = []
         for r in results:
             d = r.get("decision", {})
+            agents_count = len(r.get("agents_used", []))
             summaries.append(
-                f"**{r.get('symbol', '?')}**: {d.get('action', 'HOLD')} "
-                f"(confidence {d.get('confidence', 0):.0%})"
+                f"**{r.get('symbol', '?')}**: {d.get('action', 'BUY')} "
+                f"(confidence {d.get('confidence', 0):.0%}, {agents_count} agents)"
             )
 
         macro_line = f"\n\n**Global Macro Bias**: {macro_bias.replace('_', ' ').title()} — {action_bias.replace('_', ' ').title()}"
@@ -1433,21 +1434,22 @@ Fetched Page Content:
 
     # ── Existing pipeline methods (unchanged) ─────────────────────────────
     async def analyze_symbol(self, symbol: str) -> dict[str, Any]:
-        """Full pipeline analysis for a single symbol."""
+        """Full pipeline analysis for a single symbol — ALL agents orchestrated."""
         import os
         is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
         start = time.monotonic()
         symbol = symbol.upper().strip()
-        logger.info("[%s] Starting analysis pipeline for %s (serverless=%s)", self.name, symbol, is_serverless)
+        logger.info("[%s] Starting FULL orchestrated pipeline for %s (serverless=%s)", self.name, symbol, is_serverless)
 
         # Serverless-aware timeouts (must fit within Vercel maxDuration)
         research_timeout = 10.0 if is_serverless else 25.0
         sentiment_timeout = 8.0 if is_serverless else 15.0
-        decision_timeout = 10.0 if is_serverless else 20.0
+        decision_timeout = 15.0 if is_serverless else 30.0
         global_macro_timeout = 12.0 if is_serverless else 25.0
+        advanced_timeout = 10.0 if is_serverless else 20.0
 
-        # Phase 1: Market data + News + Research + Global Macro ALL in parallel
+        # ── Phase 1: Market data + News + Research + Global Macro ALL in parallel ──
         market_task = asyncio.create_task(self.market_agent.analyze(symbol))
         news_task = asyncio.create_task(self.news_agent.analyze(symbol))
 
@@ -1479,7 +1481,7 @@ Fetched Page Content:
                 "elapsed_seconds": round(time.monotonic() - start, 2),
             }
 
-        # Phase 2: Sentiment analysis (depends on news)
+        # ── Phase 2: Sentiment analysis (depends on news) ──
         try:
             sentiment_data = await asyncio.wait_for(
                 self.sentiment_agent.analyze(symbol, news_data),
@@ -1496,7 +1498,7 @@ Fetched Page Content:
                 "reasoning": f"Sentiment analysis unavailable: {exc}",
             }
 
-        # Phase 3: Risk assessment (depends on market + sentiment + global macro)
+        # ── Phase 3: Risk assessment (depends on market + sentiment + global macro) ──
         try:
             risk_data = await self.risk_agent.analyze(market_data, sentiment_data, global_data)
         except Exception as exc:
@@ -1511,34 +1513,127 @@ Fetched Page Content:
                 "allow_sell": True,
             }
 
-        # Phase 4: Final decision (depends on all — including web research + global macro)
+        # ── Phase 4: ML prediction (parallel with advanced agents) ──
+        ml_prediction = {}
+        ml_task = asyncio.create_task(self._safe_ml_predict(symbol))
+
+        # ── Phase 5: Advanced agents — volatility, technical, correlation, portfolio ──
+        # These run in parallel and are optional (require scipy)
+        volatility_data = {}
+        technical_data = {}
+        correlation_data = {}
+        portfolio_context = {}
+
+        if self._ensure_advanced_agents():
+            adv_tasks = []
+
+            # Volatility agent
+            async def _run_volatility():
+                try:
+                    return await asyncio.wait_for(
+                        self.volatility_agent.analyze_volatility(symbol),
+                        timeout=advanced_timeout,
+                    )
+                except Exception as e:
+                    logger.warning("[%s] Volatility analysis failed for %s: %s", self.name, symbol, e)
+                    return {"error": str(e)}
+
+            # Technical strategy agent
+            async def _run_technical():
+                try:
+                    return await asyncio.wait_for(
+                        self.technical_agent.analyze(symbol),
+                        timeout=advanced_timeout,
+                    )
+                except Exception as e:
+                    logger.warning("[%s] Technical analysis failed for %s: %s", self.name, symbol, e)
+                    return {"error": str(e)}
+
+            # Correlation agent (uses symbol + sector peers)
+            async def _run_correlation():
+                try:
+                    sector = market_data.get("sector", "")
+                    peers = market_data.get("sector_peers", [symbol])
+                    symbols_for_corr = [symbol] + [p for p in peers if p != symbol][:3]
+                    if len(symbols_for_corr) < 2:
+                        return {}
+                    return await asyncio.wait_for(
+                        self.correlation_agent.analyze_correlations(symbols_for_corr),
+                        timeout=advanced_timeout,
+                    )
+                except Exception as e:
+                    logger.warning("[%s] Correlation analysis failed for %s: %s", self.name, symbol, e)
+                    return {"error": str(e)}
+
+            # Portfolio context (if portfolio agent has context method)
+            async def _run_portfolio():
+                try:
+                    if hasattr(self.portfolio_agent, 'get_portfolio_context'):
+                        return await asyncio.wait_for(
+                            self.portfolio_agent.get_portfolio_context(symbol),
+                            timeout=advanced_timeout,
+                        )
+                    # Fallback: use basic analyze with the symbol
+                    return {}
+                except Exception as e:
+                    logger.warning("[%s] Portfolio context failed for %s: %s", self.name, symbol, e)
+                    return {"error": str(e)}
+
+            vol_task = asyncio.create_task(_run_volatility())
+            tech_task = asyncio.create_task(_run_technical())
+            corr_task = asyncio.create_task(_run_correlation())
+            port_task = asyncio.create_task(_run_portfolio())
+
+            volatility_data, technical_data, correlation_data, portfolio_context = await asyncio.gather(
+                vol_task, tech_task, corr_task, port_task
+            )
+
+        # Await ML prediction
+        ml_prediction = await ml_task
+
+        # ── Phase 6: Final orchestrated decision (ALL agent data) ──
         try:
             decision = await asyncio.wait_for(
-                self.decision_agent.decide(symbol, market_data, sentiment_data, risk_data, research_data, global_data),
+                self.decision_agent.decide(
+                    symbol=symbol,
+                    market_data=market_data,
+                    sentiment_data=sentiment_data,
+                    risk_data=risk_data,
+                    research_data=research_data,
+                    global_macro=global_data,
+                    volatility_data=volatility_data,
+                    technical_data=technical_data,
+                    correlation_data=correlation_data,
+                    ml_prediction=ml_prediction,
+                    portfolio_context=portfolio_context,
+                ),
                 timeout=decision_timeout,
             )
         except (asyncio.TimeoutError, Exception) as exc:
             logger.error("[%s] Decision failed for %s: %s", self.name, symbol, exc)
             decision = {
                 "symbol": symbol,
-                "action": "HOLD",
-                "confidence": 0.0,
-                "reasoning": f"Decision engine timed out or failed: {exc}",
-                "key_factors": [],
+                "action": "SELL",
+                "confidence": 0.1,
+                "reasoning": f"Decision engine timed out or failed: {exc}. Defaulting to SELL with minimal confidence.",
+                "key_factors": ["engine_failure"],
+                "position_size_recommendation": "minimal",
             }
 
-        # Phase 5: ML prediction overlay (non-blocking, adds to decision context)
-        ml_prediction = {}
-        try:
-            ml_prediction = await asyncio.wait_for(
-                self.ml_agent.train_and_predict(symbol),
-                timeout=10.0,
-            )
-        except (asyncio.TimeoutError, Exception) as exc:
-            logger.warning("[%s] ML prediction unavailable for %s: %s", self.name, symbol, exc)
-
         elapsed = round(time.monotonic() - start, 2)
-        logger.info("[%s] Pipeline complete for %s in %.2fs", self.name, symbol, elapsed)
+        agents_used = ["MarketAgent", "NewsAgent", "SentimentAgent", "RiskAgent",
+                       "ResearchAgent", "GlobalMarketAgent", "MLAgent", "DecisionAgent"]
+        if volatility_data and not volatility_data.get("error"):
+            agents_used.append("VolatilityAgent")
+        if technical_data and not technical_data.get("error"):
+            agents_used.append("TechnicalStrategyAgent")
+        if correlation_data and not correlation_data.get("error"):
+            agents_used.append("CorrelationAgent")
+        if portfolio_context and not portfolio_context.get("error"):
+            agents_used.append("PortfolioAgent")
+
+        logger.info("[%s] Pipeline complete for %s in %.2fs — %d agents used",
+                     self.name, symbol, elapsed, len(agents_used))
 
         return {
             "symbol": symbol,
@@ -1550,8 +1645,24 @@ Fetched Page Content:
             "research": research_data,
             "global_macro": global_data,
             "ml_prediction": ml_prediction,
+            "volatility": volatility_data,
+            "technical": technical_data,
+            "correlation": correlation_data,
+            "portfolio_context": portfolio_context,
+            "agents_used": agents_used,
             "elapsed_seconds": elapsed,
         }
+
+    async def _safe_ml_predict(self, symbol: str) -> dict:
+        """Run ML prediction with timeout, returning empty dict on failure."""
+        try:
+            return await asyncio.wait_for(
+                self.ml_agent.train_and_predict(symbol),
+                timeout=10.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("[%s] ML prediction unavailable for %s: %s", self.name, symbol, exc)
+            return {}
 
     async def analyze_multiple(self, symbols: list[str]) -> list[dict[str, Any]]:
         """Run analysis for multiple symbols concurrently."""
@@ -1567,7 +1678,7 @@ Fetched Page Content:
             "I", "A", "THE", "AND", "OR", "IS", "IT", "IN", "ON", "AT", "TO",
             "FOR", "OF", "DO", "MY", "ME", "IF", "SO", "UP", "BY", "AN", "AS",
             "BE", "NO", "AM", "WE", "HE", "OK", "CAN", "ALL", "BUT", "HOW",
-            "BUY", "SELL", "HOLD", "WHAT", "ABOUT", "SHOULD", "STOCK", "ANALYZE",
+            "BUY", "SELL", "WHAT", "ABOUT", "SHOULD", "STOCK", "ANALYZE",
             "THINK", "TELL", "GIVE", "WITH", "THIS", "THAT", "LOOK", "INTO",
             "FIND", "CURRENT", "STATUS", "GET", "SHOW", "CHECK", "PRICE",
             "NEWS", "COMPARE", "VS", "MARKET", "TODAY", "NOW", "LATEST",

@@ -88,7 +88,7 @@ class VectorStore:
         symbol = result.get("symbol", "")
         decision = result.get("decision", {})
         text = (
-            f"{symbol}: {decision.get('action', 'HOLD')} "
+            f"{symbol}: {decision.get('action', 'BUY')} "
             f"(confidence {decision.get('confidence', 0)}) — "
             f"{decision.get('reasoning', '')}"
         )

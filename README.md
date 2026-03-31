@@ -1,4 +1,4 @@
-# 🚀 AI Multi-Agent Trading System (24/7 Investment Intelligence Engine)
+# � TradingEdge — AI-Powered Global Trading Advisory Platform
 
 ## 🧠 Overview
 

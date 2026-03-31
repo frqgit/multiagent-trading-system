@@ -1,4 +1,4 @@
-"""Streamlit UI — TradingEdge Australia: AI-Powered Global Trading Advisory Platform."""
+"""Streamlit UI — TradingEdge: AI-Powered Global Trading Advisory Platform."""
 
 from __future__ import annotations
 
@@ -120,8 +120,8 @@ US_TOP_STOCKS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "AMD"]
 
 
 st.set_page_config(
-    page_title="TradingEdge Australia — AI Trading Advisory",
-    page_icon="🦘",
+    page_title="TradingEdge — AI Trading Advisory",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -766,9 +766,9 @@ def _render_analysis(r: dict):
     risk = r.get("risk", {})
     articles = r.get("news_articles", [])
 
-    action = decision.get("action", "HOLD")
+    action = decision.get("action", "BUY")
     confidence = decision.get("confidence", 0)
-    badge_class = {"BUY": "badge-buy", "SELL": "badge-sell"}.get(action, "badge-hold")
+    badge_class = {"STRONG_BUY": "badge-buy", "BUY": "badge-buy", "STRONG_SELL": "badge-sell", "SELL": "badge-sell"}.get(action, "badge-sell")
 
     symbol = r.get("symbol", "?")
     company = market.get("company_name", symbol)
@@ -1274,7 +1274,7 @@ def _render_admin_panel():
                         pnl = trade.get("pnl")
                         broker = trade.get("broker", "")
                         mode = trade.get("mode", "")
-                        action_color = "metric-green" if action_str == "BUY" else ("metric-red" if action_str == "SELL" else "metric-yellow")
+                        action_color = "metric-green" if action_str in ("BUY", "STRONG_BUY") else ("metric-red" if action_str in ("SELL", "STRONG_SELL") else "metric-yellow")
                         pnl_str = f"P&L: ${pnl:.2f}" if pnl is not None else ""
                         pnl_color = "color:var(--accent-green)" if pnl and pnl >= 0 else "color:var(--accent-red)"
                         st.markdown(f"""
@@ -1358,7 +1358,7 @@ def _render_broker_panel():
 
     st.markdown("""
     <div class="hero-disclaimer" style="margin-top:24px;">
-        ⚠️ <strong>Disclaimer:</strong> TradingEdge Australia is not affiliated with, endorsed by, or a partner of any
+        ⚠️ <strong>Disclaimer:</strong> TradingEdge is not affiliated with, endorsed by, or a partner of any
         broker listed above. Links are provided for your convenience. Always conduct your own due diligence
         before selecting a broker. Broker availability, fees, and features may change without notice.
         Australian Financial Services Licence (AFSL) requirements apply to all brokers.
@@ -1920,9 +1920,9 @@ def _render_landing_page():
     with nav_left:
         st.markdown("""
         <div class="top-nav-brand">
-            <span class="top-nav-logo">🦘</span>
+            <span class="top-nav-logo">📈</span>
             <div>
-                <div class="top-nav-name">TradingEdge Australia</div>
+                <div class="top-nav-name">TradingEdge</div>
                 <div class="top-nav-tag">AI Trading Advisory</div>
             </div>
         </div>
@@ -2031,9 +2031,9 @@ def _render_landing_page():
     st.markdown("""
     <div class="hero-section">
         <div class="hero-brand">
-            <span class="hero-logo">🦘</span>
+            <span class="hero-logo">📈</span>
             <div>
-                <div class="hero-brand-text">TradingEdge Australia</div>
+                <div class="hero-brand-text">TradingEdge</div>
                 <div class="hero-brand-sub">AI-Powered Trading Advisory</div>
             </div>
         </div>
@@ -2042,7 +2042,7 @@ def _render_landing_page():
             <span>Multi-Agent AI Intelligence</span>
         </h1>
         <p class="hero-subtitle">
-            Australia's premier AI trading advisory platform. Get institutional-grade analysis powered by
+            The premier AI trading advisory platform. Get institutional-grade analysis powered by
             15+ specialised AI agents — covering ASX, US, and global markets. Not a broker.
             Pure intelligence to help you trade smarter.
         </p>
@@ -2055,7 +2055,7 @@ def _render_landing_page():
             <span class="hero-badge">📰 News Sentiment AI</span>
         </div>
         <div class="hero-disclaimer">
-            ⚠️ <strong>Important:</strong> TradingEdge Australia is a trading advisory and analysis platform — not a broker,
+            ⚠️ <strong>Important:</strong> TradingEdge is a trading advisory and analysis platform — not a broker,
             dealer, or financial intermediary. We do not execute trades, hold funds, or provide personal financial advice.
             All analysis is AI-generated and for informational purposes only. Always consult a licensed financial adviser
             (AFSL holder) before making investment decisions. Past performance is not indicative of future results.
@@ -2279,10 +2279,10 @@ def _render_landing_page():
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:24px 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="color:var(--text-muted);font-size:0.75rem;line-height:1.6;max-width:700px;margin:0 auto;">
-            <strong>TradingEdge Australia</strong> — AI-Powered Trading Advisory Platform<br>
+            <strong>TradingEdge</strong> — AI-Powered Trading Advisory Platform<br>
             ABN: XX XXX XXX XXX | Not a broker or dealer. Advisory service only.<br>
             All AI-generated analysis is for informational purposes only and does not constitute financial advice.<br>
-            © 2026 TradingEdge Australia. All rights reserved. 🇦🇺
+            © 2026 TradingEdge. All rights reserved.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -2307,8 +2307,8 @@ user = st.session_state.auth_user
 with st.sidebar:
     st.markdown("""
     <div style="text-align:center;padding:10px 0 16px 0">
-        <div style="font-size:2rem;margin-bottom:4px;">🦘</div>
-        <h2 style="color:var(--text-primary);margin:0;font-size:1.1rem;font-weight:800;">TradingEdge Australia</h2>
+        <div style="font-size:2rem;margin-bottom:4px;">📈</div>
+        <h2 style="color:var(--text-primary);margin:0;font-size:1.1rem;font-weight:800;">TradingEdge</h2>
         <p style="color:var(--accent-cyan);font-size:0.7rem;margin:2px 0 0 0;font-weight:600;letter-spacing:1px;">AI TRADING ADVISORY</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2494,8 +2494,8 @@ with st.sidebar:
             with httpx.Client(timeout=10) as client:
                 hist = client.get(f"{API_BASE}/history", params={"limit": 10}, headers=_auth_headers()).json()
             for rec in hist.get("records", []):
-                action = rec.get("action", "HOLD")
-                icon = {"BUY": "🟢", "SELL": "🔴"}.get(action, "🟡")
+                action = rec.get("action", "BUY")
+                icon = {"STRONG_BUY": "🟢", "BUY": "🟢", "STRONG_SELL": "🔴", "SELL": "🔴"}.get(action, "🟡")
                 st.markdown(
                     f"{icon} **{rec['symbol']}** → {action} "
                     f"({rec.get('confidence', 0):.0%}) — {rec.get('created_at', '')[:16]}"
@@ -2506,7 +2506,7 @@ with st.sidebar:
     st.divider()
     st.markdown(
         '<p style="color:var(--text-muted);font-size:0.68rem;text-align:center;line-height:1.5;">'
-        '🦘 TradingEdge Australia<br>'
+        '📈 TradingEdge<br>'
         'AI Advisory Platform — Not a Broker<br>'
         'Powered by OpenAI • yfinance • NewsAPI<br>'
         'Multi-Agent Architecture • ASIC Compliant</p>',
@@ -2620,7 +2620,7 @@ else:
                     summaries = []
                     for r in response["analyses"]:
                         _render_analysis(r)
-                        action = r.get("decision", {}).get("action", "HOLD")
+                        action = r.get("decision", {}).get("action", "BUY")
                         conf = r.get("decision", {}).get("confidence", 0)
                         sym = r.get("symbol", "?")
                         summaries.append(f"**{sym}**: {action} ({conf:.0%})")

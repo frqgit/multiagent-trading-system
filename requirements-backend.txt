@@ -1,5 +1,5 @@
 # ============================================
-# AI Multi-Agent Trading System - Backend (Vercel)
+# TradingEdge - Backend (Vercel)
 # ============================================
 
 # Web Framework

@@ -1,5 +1,5 @@
 # ============================================
-# AI Multi-Agent Trading System - Streamlit Cloud
+# TradingEdge - Streamlit Cloud
 # Only the packages the Streamlit UI actually imports.
 # Backend deps live in requirements-backend.txt
 # (used by Vercel & Docker).

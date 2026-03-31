@@ -112,7 +112,7 @@ class ResearchResponse(BaseModel):
 
 
 class DecisionResponse(BaseModel):
-    action: str = "HOLD"
+    action: str = "BUY"
     confidence: float = 0.0
     reasoning: str = ""
     key_factors: list[str] = []

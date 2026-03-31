@@ -1,5 +1,5 @@
 # ============================================
-# AI Multi-Agent Trading System - Full Dependencies
+# TradingEdge - Full Dependencies
 # Used by Docker and local development
 # ============================================
 

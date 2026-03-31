@@ -57,8 +57,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Multi-Agent Trading System",
-    description="24/7 Investment Intelligence Engine with multi-agent architecture",
+    title="TradingEdge",
+    description="AI-Powered Global Trading Advisory Platform with multi-agent architecture",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -96,7 +96,7 @@ app.include_router(strategy_router)
 @app.get("/")
 async def root():
     return {
-        "name": "AI Multi-Agent Trading System",
+        "name": "TradingEdge",
         "version": "1.0.0",
         "docs": "/docs",
     }
