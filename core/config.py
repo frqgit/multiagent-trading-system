@@ -37,7 +37,37 @@ class Settings:
     ibkr_host: str = field(default_factory=lambda: _get_env("IBKR_HOST", "127.0.0.1"))
     ibkr_port: int = field(default_factory=lambda: int(_get_env("IBKR_PORT", "7497")))
     ibkr_client_id: int = field(default_factory=lambda: int(_get_env("IBKR_CLIENT_ID", "1")))
-    ibkr_mode: str = field(default_factory=lambda: _get_env("IBKR_MODE", "paper"))  # paper | live
+    ibkr_mode: str = field(default_factory=lambda: _get_env("IBKR_MODE", "live"))  # live | paper
+
+    # CommSec (Commonwealth Securities)
+    commsec_client_id: str = field(default_factory=lambda: _get_env("COMMSEC_CLIENT_ID", ""))
+    commsec_client_secret: str = field(default_factory=lambda: _get_env("COMMSEC_CLIENT_SECRET", ""))
+    commsec_account_id: str = field(default_factory=lambda: _get_env("COMMSEC_ACCOUNT_ID", ""))
+    commsec_refresh_token: str = field(default_factory=lambda: _get_env("COMMSEC_REFRESH_TOKEN", ""))
+
+    # IG Markets
+    ig_api_key: str = field(default_factory=lambda: _get_env("IG_API_KEY", ""))
+    ig_username: str = field(default_factory=lambda: _get_env("IG_USERNAME", ""))
+    ig_password: str = field(default_factory=lambda: _get_env("IG_PASSWORD", ""))
+    ig_account_id: str = field(default_factory=lambda: _get_env("IG_ACCOUNT_ID", ""))
+
+    # CMC Markets
+    cmc_api_key: str = field(default_factory=lambda: _get_env("CMC_API_KEY", ""))
+    cmc_username: str = field(default_factory=lambda: _get_env("CMC_USERNAME", ""))
+    cmc_password: str = field(default_factory=lambda: _get_env("CMC_PASSWORD", ""))
+    cmc_account_id: str = field(default_factory=lambda: _get_env("CMC_ACCOUNT_ID", ""))
+
+    # SelfWealth
+    selfwealth_api_key: str = field(default_factory=lambda: _get_env("SELFWEALTH_API_KEY", ""))
+    selfwealth_client_id: str = field(default_factory=lambda: _get_env("SELFWEALTH_CLIENT_ID", ""))
+    selfwealth_secret: str = field(default_factory=lambda: _get_env("SELFWEALTH_SECRET", ""))
+    selfwealth_account_id: str = field(default_factory=lambda: _get_env("SELFWEALTH_ACCOUNT_ID", ""))
+
+    # Trading Mode
+    trading_mode: str = field(default_factory=lambda: _get_env("TRADING_MODE", "live"))  # live | paper
+    auto_trading_enabled: bool = field(
+        default_factory=lambda: _get_env("AUTO_TRADING_ENABLED", "false").lower() == "true"
+    )
 
     # Database
     database_url: str = field(
@@ -85,6 +115,21 @@ class Settings:
     )
     auto_stop_loss_pct: float = field(
         default_factory=lambda: float(_get_env("AUTO_STOP_LOSS_PCT", "3.0"))
+    )
+    weekly_loss_limit_pct: float = field(
+        default_factory=lambda: float(_get_env("WEEKLY_LOSS_LIMIT_PCT", "10.0"))
+    )
+    max_drawdown_pct: float = field(
+        default_factory=lambda: float(_get_env("MAX_DRAWDOWN_PCT", "15.0"))
+    )
+    max_single_order_value: float = field(
+        default_factory=lambda: float(_get_env("MAX_SINGLE_ORDER_VALUE", "100000"))
+    )
+    max_daily_orders: int = field(
+        default_factory=lambda: int(_get_env("MAX_DAILY_ORDERS", "200"))
+    )
+    max_open_positions: int = field(
+        default_factory=lambda: int(_get_env("MAX_OPEN_POSITIONS", "50"))
     )
 
     @property

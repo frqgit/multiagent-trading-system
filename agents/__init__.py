@@ -18,6 +18,10 @@ Advanced Agents (require scipy):
 - CorrelationAnalysisAgent: Correlation and pair trading
 - AdaptiveLearningAgent: ML-based strategy adaptation
 - ExecutionAgent: Paper trading execution
+
+Live Trading Agents:
+- LiveExecutionAgent: Real-market multi-broker execution
+- ComplianceAgent: ASIC/ASX regulatory compliance monitoring
 """
 
 from agents.market_agent import MarketAnalystAgent
@@ -52,6 +56,18 @@ def _get_advanced_agents():
     except ImportError:
         return {}
 
+def _get_live_agents():
+    """Lazy import live trading agents."""
+    try:
+        from agents.live_execution_agent import LiveExecutionAgent
+        from agents.compliance_agent import ComplianceAgent
+        return {
+            "LiveExecutionAgent": LiveExecutionAgent,
+            "ComplianceAgent": ComplianceAgent,
+        }
+    except ImportError:
+        return {}
+
 __all__ = [
     # Core
     "MarketAnalystAgent",
@@ -64,4 +80,6 @@ __all__ = [
     "OrchestratorAgent",
     # Advanced (may not be available)
     "_get_advanced_agents",
+    # Live trading (may not be available)
+    "_get_live_agents",
 ]

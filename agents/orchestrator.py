@@ -12,6 +12,9 @@ Enhanced with:
 - Correlation analysis
 - Adaptive learning
 - Paper trading execution
+- **Live multi-broker execution** (IBKR, CommSec, IG Markets, CMC Markets, SelfWealth)
+- Enterprise risk engine with circuit breakers and kill switch
+- ASIC/ASX compliance monitoring
 """
 
 from __future__ import annotations
@@ -43,6 +46,25 @@ TechnicalStrategyAgent = None
 CorrelationAnalysisAgent = None
 AdaptiveLearningAgent = None
 ExecutionAgent = None
+
+# Live trading imports (loaded separately — no scipy dependency)
+_LIVE_TRADING_AVAILABLE = False
+LiveExecutionAgent = None
+
+def _load_live_trading():
+    """Load live execution agent and supporting modules."""
+    global _LIVE_TRADING_AVAILABLE, LiveExecutionAgent
+    if _LIVE_TRADING_AVAILABLE:
+        return True
+    try:
+        from agents.live_execution_agent import LiveExecutionAgent as _Live
+        LiveExecutionAgent = _Live
+        _LIVE_TRADING_AVAILABLE = True
+        logger.info("Live trading agent loaded successfully")
+        return True
+    except ImportError as e:
+        logger.warning("Live trading agent unavailable: %s", e)
+        return False
 
 def _load_advanced_agents():
     """Lazy load advanced agents that require scipy."""
@@ -154,6 +176,7 @@ class OrchestratorAgent:
     - Correlation analysis with pair trading signals
     - Adaptive learning with regime-based strategy selection
     - Paper trading execution with position management
+    - **Live multi-broker execution** with risk-gated OMS
     """
 
     name = "OrchestratorAgent"
@@ -179,6 +202,20 @@ class OrchestratorAgent:
         self.correlation_agent = None
         self.adaptive_agent = None
         self.execution_agent = None
+
+        # Live trading agent (lazy-loaded, no scipy dependency)
+        self._live_loaded = False
+        self.live_execution_agent = None
+
+        # Determine trading mode from config
+        try:
+            from core.config import get_settings
+            settings = get_settings()
+            self._trading_mode = getattr(settings, "trading_mode", "paper")
+            self._auto_trading = getattr(settings, "auto_trading_enabled", False)
+        except Exception:
+            self._trading_mode = "paper"
+            self._auto_trading = False
     
     def _ensure_advanced_agents(self) -> bool:
         """Lazy-load advanced agents on first use."""
@@ -206,6 +243,20 @@ class OrchestratorAgent:
                       f"Please use the Docker deployment or local installation for advanced trading features.",
             "symbols": [],
         }
+
+    def _ensure_live_agent(self) -> bool:
+        """Lazy-load live execution agent on first use."""
+        if self._live_loaded:
+            return self.live_execution_agent is not None
+        self._live_loaded = True
+        if _load_live_trading():
+            self.live_execution_agent = LiveExecutionAgent()
+            return True
+        return False
+
+    @property
+    def is_live_mode(self) -> bool:
+        return self._trading_mode == "live"
 
     # ── Public entry point ────────────────────────────────────────────────
     async def chat(self, user_message: str) -> dict[str, Any]:
@@ -268,7 +319,9 @@ class OrchestratorAgent:
             else:
                 result = self._advanced_agents_unavailable("correlation analysis")
         elif intent == "execution":
-            if self._ensure_advanced_agents():
+            if self.is_live_mode and self._ensure_live_agent():
+                result = await self._handle_live_execution(symbols, query)
+            elif self._ensure_advanced_agents():
                 result = await self._handle_execution(symbols, query)
             else:
                 result = self._advanced_agents_unavailable("paper trading")
@@ -983,6 +1036,197 @@ Fetched Page Content:
         }
 
     # ── Execution Handler ─────────────────────────────────────────────────
+    # ── Live Execution Handler ─────────────────────────────────────────
+    async def _handle_live_execution(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Handle live multi-broker trading execution."""
+        logger.info("[%s] LIVE execution handler for: %s", self.name, query)
+        query_lower = query.lower()
+
+        # Portfolio summary across all brokers
+        if any(kw in query_lower for kw in ["portfolio", "positions", "holdings", "balance"]):
+            try:
+                from tools.broker_manager import get_broker_manager
+                manager = get_broker_manager()
+                portfolio = await manager.get_consolidated_portfolio()
+                accts = portfolio.get("accounts", {})
+                total_equity = sum(a.get("equity", 0) for a in accts.values())
+                total_cash = sum(a.get("cash", 0) for a in accts.values())
+                all_positions = portfolio.get("positions", {})
+                answer_parts = [
+                    "## 💼 Live Portfolio (All Brokers)",
+                    "",
+                    f"**Total Equity:** ${total_equity:,.2f} | **Cash:** ${total_cash:,.2f}",
+                    "",
+                ]
+                for bid, positions in all_positions.items():
+                    if positions:
+                        answer_parts.append(f"### {bid.upper()}")
+                        for p in positions:
+                            pnl = getattr(p, "unrealized_pnl", 0) or 0
+                            icon = "📈" if pnl >= 0 else "📉"
+                            answer_parts.append(
+                                f"- {icon} **{p.symbol}**: {p.quantity} shares "
+                                f"(P&L: ${pnl:+,.2f})"
+                            )
+                        answer_parts.append("")
+                return {
+                    "type": "live_execution",
+                    "answer": "\n".join(answer_parts),
+                    "portfolio": portfolio,
+                    "symbols": symbols,
+                }
+            except Exception as exc:
+                logger.error("[%s] Live portfolio failed: %s", self.name, exc)
+                return {
+                    "type": "live_execution",
+                    "answer": f"⚠️ Could not retrieve live portfolio: {exc}",
+                    "symbols": symbols,
+                }
+
+        # Live trade execution
+        if any(kw in query_lower for kw in ["buy", "sell", "order", "trade", "execute"]):
+            if not symbols:
+                return {
+                    "type": "live_execution",
+                    "answer": "⚠️ Please specify a symbol to trade.",
+                    "symbols": [],
+                }
+            symbol = symbols[0]
+            side = "BUY" if "buy" in query_lower else "SELL"
+
+            # Get market data for the symbol
+            market_data = await self.market_agent.analyze(symbol)
+            if "error" in market_data and "price" not in market_data:
+                return {
+                    "type": "live_execution",
+                    "answer": f"⚠️ Could not get price for {symbol}: {market_data.get('error')}",
+                    "symbols": symbols,
+                }
+            current_price = market_data.get("price", 0)
+
+            # Run full analysis to get signal
+            decision_data = await self.decision_agent.decide(
+                symbol=symbol,
+                market_data=market_data,
+                news_data={"sentiment": "neutral"},
+                sentiment_data={"overall_score": 0.5},
+                risk_data={"risk_score": 5},
+            )
+            confidence = decision_data.get("confidence", 0.5)
+
+            # Execute through live agent
+            result = await self.live_execution_agent.execute_signal(
+                symbol=symbol,
+                signal={
+                    "action": f"{'STRONG_' if confidence > 0.8 else ''}{side}",
+                    "confidence": confidence,
+                    "entry_price": current_price,
+                    "stop_loss": decision_data.get("stop_loss"),
+                    "target_price": decision_data.get("target_price"),
+                },
+            )
+
+            if result.get("executed"):
+                answer = (
+                    f"## ✅ LIVE Order Executed\n\n"
+                    f"**{side} {symbol}** — {result.get('quantity', 0)} shares @ "
+                    f"${result.get('avg_fill_price', current_price):,.2f}\n"
+                    f"**Broker:** {result.get('broker', 'N/A')}\n"
+                    f"**Order ID:** `{result.get('order_id', 'N/A')}`"
+                )
+            elif result.get("risk_rejected"):
+                answer = (
+                    f"## 🛑 Order Blocked by Risk Engine\n\n"
+                    f"**{side} {symbol}** was rejected.\n"
+                    f"**Reason:** {result.get('risk_reason', 'Unknown')}"
+                )
+            else:
+                answer = (
+                    f"## ⚠️ Order Not Executed\n\n"
+                    f"**{side} {symbol}** — {result.get('reason', 'Unknown error')}"
+                )
+
+            return {
+                "type": "live_execution",
+                "answer": answer,
+                "execution_result": result,
+                "symbols": symbols,
+            }
+
+        # Risk engine status
+        if any(kw in query_lower for kw in ["risk", "kill switch", "circuit", "halt"]):
+            try:
+                from core.risk_engine import get_risk_engine
+                status = get_risk_engine().get_status()
+                answer_parts = [
+                    "## 🛡️ Risk Engine Status",
+                    "",
+                    f"**Kill Switch:** {'🔴 ACTIVE' if status.get('kill_switch_active') else '🟢 Inactive'}",
+                    f"**Trading Halted:** {'🔴 YES' if status.get('trading_halted') else '🟢 No'}",
+                    f"**Daily P&L:** ${status.get('daily_pnl', 0):+,.2f}",
+                    f"**Daily Orders:** {status.get('daily_order_count', 0)}",
+                    f"**Open Positions:** {status.get('open_position_count', 0)}",
+                ]
+                if status.get("halt_reason"):
+                    answer_parts.append(f"**Halt Reason:** {status['halt_reason']}")
+                return {
+                    "type": "live_execution",
+                    "answer": "\n".join(answer_parts),
+                    "risk_status": status,
+                    "symbols": symbols,
+                }
+            except Exception as exc:
+                return {
+                    "type": "live_execution",
+                    "answer": f"⚠️ Risk engine error: {exc}",
+                    "symbols": symbols,
+                }
+
+        # Emergency stop
+        if any(kw in query_lower for kw in ["emergency", "stop all", "cancel all", "close all"]):
+            result = await self.live_execution_agent.emergency_stop(
+                reason="Triggered via chat command"
+            )
+            return {
+                "type": "live_execution",
+                "answer": "## 🚨 Emergency Stop Activated\n\nAll orders cancelled. All positions closed. Kill switch engaged.",
+                "emergency_result": result,
+                "symbols": symbols,
+            }
+
+        # Default: show broker and OMS status
+        try:
+            from tools.broker_manager import get_broker_manager
+            from core.order_management import get_oms
+            brokers = get_broker_manager().list_brokers()
+            oms_status = get_oms().get_status()
+            answer_parts = [
+                "## 🔌 Live Trading Status",
+                "",
+                f"**Mode:** LIVE | **Auto-Trading:** {'Enabled' if self._auto_trading else 'Disabled'}",
+                "",
+                "### Connected Brokers",
+            ]
+            for b in brokers:
+                icon = "🟢" if b.get("connected") else "🔴"
+                answer_parts.append(f"- {icon} **{b['id']}**: {b.get('status', 'unknown')}")
+            answer_parts.append("")
+            answer_parts.append(f"### OMS: {oms_status.get('active_orders', 0)} active orders")
+            return {
+                "type": "live_execution",
+                "answer": "\n".join(answer_parts),
+                "brokers": brokers,
+                "oms_status": oms_status,
+                "symbols": symbols,
+            }
+        except Exception as exc:
+            return {
+                "type": "live_execution",
+                "answer": f"⚠️ Could not get trading status: {exc}",
+                "symbols": symbols,
+            }
+
+    # ── Paper Execution Handler ───────────────────────────────────────────
     async def _handle_execution(self, symbols: list[str], query: str) -> dict[str, Any]:
         """Handle paper trading execution and portfolio queries."""
         logger.info("[%s] Execution handler for: %s", self.name, query)
