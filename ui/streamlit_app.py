@@ -624,9 +624,7 @@ st.markdown("""
         div[data-testid="column"] { padding-left: 4px !important; padding-right: 4px !important; }
         .block-container { padding-left: 1rem !important; padding-right: 1rem !important; padding-top: 1rem !important; }
 
-        .bloomberg-widget { margin-bottom: 12px; }
-        .bloomberg-iframe-wrap { height: 280px; }
-        .market-widget { margin-bottom: 10px; }
+        .market-widget { margin-bottom: 8px; }
         .market-iframe-wrap { height: 200px; }
     }
 
@@ -2638,89 +2636,137 @@ else:
     # Live Market Widgets (top-right) — Bloomberg, Trading Economics, Yahoo Finance
     _bb_left, _bb_right = st.columns([3, 2])
     with _bb_right:
-        # --- Widget builder helper ---
-        _MARKET_WIDGETS = [
-            {
-                "id": "bb",
-                "title": "Bloomberg Markets",
-                "icon": "📊",
-                "url": "https://www.bloomberg.com/markets/stocks",
-            },
-            {
-                "id": "te",
-                "title": "Trading Economics",
-                "icon": "📈",
-                "url": "https://tradingeconomics.com/stocks",
-            },
-            {
-                "id": "yf",
-                "title": "Yahoo Finance — World Indices",
-                "icon": "🌐",
-                "url": "https://finance.yahoo.com/markets/world-indices/",
-            },
-        ]
-        _widget_html = ""
-        for w in _MARKET_WIDGETS:
-            _widget_html += f"""
-            <div class="market-widget">
-                <div class="market-widget-header">
-                    <span class="market-widget-title">
-                        <span class="mw-dot"></span>
-                        {w['icon']} {w['title']}
-                    </span>
-                    <a class="market-open-btn"
-                       href="{w['url']}"
-                       target="_blank" rel="noopener noreferrer">
-                        Open ↗
-                    </a>
-                </div>
-                <div class="market-iframe-wrap" id="mw-{w['id']}">
-                    <iframe
-                        src="{w['url']}"
-                        sandbox="allow-scripts allow-same-origin allow-popups"
-                        loading="lazy"
-                        referrerpolicy="no-referrer"
-                    ></iframe>
-                    <div class="market-fallback">
-                        <div class="mf-icon">{w['icon']}</div>
-                        <div class="mf-text">
-                            Live preview blocked by site security policy.<br>
-                            <a href="{w['url']}" target="_blank"
-                               rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
-                                Open {w['title']} →
-                            </a>
-                        </div>
+        # --- Bloomberg Markets ---
+        st.markdown("""
+        <div class="market-widget">
+            <div class="market-widget-header">
+                <span class="market-widget-title">
+                    <span class="mw-dot"></span>
+                    📊 Bloomberg Markets
+                </span>
+                <a class="market-open-btn"
+                   href="https://www.bloomberg.com/markets/stocks"
+                   target="_blank" rel="noopener noreferrer">
+                    Open ↗
+                </a>
+            </div>
+            <div class="market-iframe-wrap" id="mw-bb">
+                <iframe
+                    src="https://www.bloomberg.com/markets/stocks"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                ></iframe>
+                <div class="market-fallback">
+                    <div class="mf-icon">📊</div>
+                    <div class="mf-text">
+                        Live preview blocked by site security policy.<br>
+                        <a href="https://www.bloomberg.com/markets/stocks" target="_blank"
+                           rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
+                            Open Bloomberg Markets →
+                        </a>
                     </div>
                 </div>
             </div>
-            """
-        # JS to detect blocked iframes and show fallback
-        _widget_html += """
+        </div>
         <script>
-        (function() {
-            var ids = ['mw-bb', 'mw-te', 'mw-yf'];
-            ids.forEach(function(id) {
-                var wrap = document.getElementById(id);
-                if (!wrap) return;
-                var iframe = wrap.querySelector('iframe');
-                var fallback = wrap.querySelector('.market-fallback');
-                setTimeout(function() {
-                    try {
-                        var doc = iframe.contentDocument || iframe.contentWindow.document;
-                        if (!doc || !doc.body || doc.body.innerHTML.length < 100) {
-                            iframe.style.display = 'none';
-                            fallback.style.display = 'flex';
-                        }
-                    } catch(e) {
-                        iframe.style.display = 'none';
-                        fallback.style.display = 'flex';
-                    }
-                }, 4000);
-            });
+        (function(){
+            var w=document.getElementById('mw-bb');if(!w)return;
+            var f=w.querySelector('iframe'),fb=w.querySelector('.market-fallback');
+            setTimeout(function(){try{var d=f.contentDocument||f.contentWindow.document;
+            if(!d||!d.body||d.body.innerHTML.length<100){f.style.display='none';fb.style.display='flex';}}
+            catch(e){f.style.display='none';fb.style.display='flex';}},4000);
         })();
         </script>
-        """
-        st.markdown(_widget_html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+        # --- Trading Economics ---
+        st.markdown("""
+        <div class="market-widget">
+            <div class="market-widget-header">
+                <span class="market-widget-title">
+                    <span class="mw-dot"></span>
+                    📈 Trading Economics
+                </span>
+                <a class="market-open-btn"
+                   href="https://tradingeconomics.com/stocks"
+                   target="_blank" rel="noopener noreferrer">
+                    Open ↗
+                </a>
+            </div>
+            <div class="market-iframe-wrap" id="mw-te">
+                <iframe
+                    src="https://tradingeconomics.com/stocks"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                ></iframe>
+                <div class="market-fallback">
+                    <div class="mf-icon">📈</div>
+                    <div class="mf-text">
+                        Live preview blocked by site security policy.<br>
+                        <a href="https://tradingeconomics.com/stocks" target="_blank"
+                           rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
+                            Open Trading Economics →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function(){
+            var w=document.getElementById('mw-te');if(!w)return;
+            var f=w.querySelector('iframe'),fb=w.querySelector('.market-fallback');
+            setTimeout(function(){try{var d=f.contentDocument||f.contentWindow.document;
+            if(!d||!d.body||d.body.innerHTML.length<100){f.style.display='none';fb.style.display='flex';}}
+            catch(e){f.style.display='none';fb.style.display='flex';}},4000);
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+
+        # --- Yahoo Finance World Indices ---
+        st.markdown("""
+        <div class="market-widget">
+            <div class="market-widget-header">
+                <span class="market-widget-title">
+                    <span class="mw-dot"></span>
+                    🌐 Yahoo Finance — World Indices
+                </span>
+                <a class="market-open-btn"
+                   href="https://finance.yahoo.com/markets/world-indices/"
+                   target="_blank" rel="noopener noreferrer">
+                    Open ↗
+                </a>
+            </div>
+            <div class="market-iframe-wrap" id="mw-yf">
+                <iframe
+                    src="https://finance.yahoo.com/markets/world-indices/"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                ></iframe>
+                <div class="market-fallback">
+                    <div class="mf-icon">🌐</div>
+                    <div class="mf-text">
+                        Live preview blocked by site security policy.<br>
+                        <a href="https://finance.yahoo.com/markets/world-indices/" target="_blank"
+                           rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
+                            Open Yahoo Finance →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function(){
+            var w=document.getElementById('mw-yf');if(!w)return;
+            var f=w.querySelector('iframe'),fb=w.querySelector('.market-fallback');
+            setTimeout(function(){try{var d=f.contentDocument||f.contentWindow.document;
+            if(!d||!d.body||d.body.innerHTML.length<100){f.style.display='none';fb.style.display='flex';}}
+            catch(e){f.style.display='none';fb.style.display='flex';}},4000);
+        })();
+        </script>
+        """, unsafe_allow_html=True)
 
     # Display prior chat messages (compact)
     for msg in st.session_state.messages:
