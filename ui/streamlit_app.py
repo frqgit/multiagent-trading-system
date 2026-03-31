@@ -272,6 +272,86 @@ st.markdown("""
     .main-header h1 { color: var(--text-primary); margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
     .main-header p { color: var(--text-secondary); margin: 4px 0 0 0; font-size: 0.85rem; }
 
+    /* ===== BLOOMBERG LIVE WIDGET ===== */
+    .bloomberg-widget {
+        background: var(--gradient-card);
+        border: 1px solid var(--border-primary);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--shadow-glow);
+        margin-bottom: 16px;
+    }
+    .bloomberg-widget-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        background: rgba(59, 130, 246, 0.08);
+        border-bottom: 1px solid var(--border-primary);
+    }
+    .bloomberg-widget-title {
+        color: var(--text-primary);
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .bloomberg-widget-title .bw-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--accent-green);
+        display: inline-block;
+        animation: bw-pulse 2s infinite;
+    }
+    @keyframes bw-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+    .bloomberg-open-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 14px;
+        background: var(--gradient-accent);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .bloomberg-open-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+        color: #fff;
+    }
+    .bloomberg-iframe-wrap {
+        width: 100%;
+        height: 380px;
+        position: relative;
+        background: #0a0a0a;
+    }
+    .bloomberg-iframe-wrap iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+    .bloomberg-fallback {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 32px;
+        gap: 12px;
+    }
+    .bloomberg-fallback .bf-icon { font-size: 2.5rem; }
+    .bloomberg-fallback .bf-text { font-size: 0.85rem; line-height: 1.5; }
+
     /* ===== FEATURE CARDS ===== */
     .feature-grid {
         display: grid;
@@ -543,6 +623,9 @@ st.markdown("""
         .stButton > button { min-height: 44px; font-size: 0.85rem; }
         div[data-testid="column"] { padding-left: 4px !important; padding-right: 4px !important; }
         .block-container { padding-left: 1rem !important; padding-right: 1rem !important; padding-top: 1rem !important; }
+
+        .bloomberg-widget { margin-bottom: 12px; }
+        .bloomberg-iframe-wrap { height: 280px; }
     }
 
     @media (max-width: 480px) {
@@ -2549,6 +2632,68 @@ else:
         <p>Ask me anything — ASX & global stocks, analysis, news, comparisons, or market outlook. Powered by 15+ AI agents.</p>
     </div>
     """, unsafe_allow_html=True)
+
+    # Bloomberg Markets live widget (top-right)
+    _bb_left, _bb_right = st.columns([3, 2])
+    with _bb_right:
+        st.markdown("""
+        <div class="bloomberg-widget">
+            <div class="bloomberg-widget-header">
+                <span class="bloomberg-widget-title">
+                    <span class="bw-dot"></span>
+                    Bloomberg Markets — Stocks
+                </span>
+                <a class="bloomberg-open-btn"
+                   href="https://www.bloomberg.com/markets/stocks"
+                   target="_blank" rel="noopener noreferrer">
+                    Open in new tab ↗
+                </a>
+            </div>
+            <div class="bloomberg-iframe-wrap" id="bb-iframe-wrap">
+                <iframe
+                    src="https://www.bloomberg.com/markets/stocks"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                    onload="this.parentElement.querySelector('.bloomberg-fallback')&&(this.parentElement.querySelector('.bloomberg-fallback').style.display='none')"
+                    onerror="this.style.display='none';this.parentElement.querySelector('.bloomberg-fallback').style.display='flex'"
+                ></iframe>
+                <div class="bloomberg-fallback">
+                    <div class="bf-icon">📊</div>
+                    <div class="bf-text">
+                        Bloomberg Markets preview is blocked by the site's security policy.<br>
+                        <a href="https://www.bloomberg.com/markets/stocks" target="_blank"
+                           rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
+                            Click here to open Bloomberg Markets →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        // Detect X-Frame-Options / CSP blocks (iframe won't fire onerror for those)
+        (function() {
+            var wrap = document.getElementById('bb-iframe-wrap');
+            if (!wrap) return;
+            var iframe = wrap.querySelector('iframe');
+            var fallback = wrap.querySelector('.bloomberg-fallback');
+            setTimeout(function() {
+                try {
+                    // If we can't access iframe content after load, it was likely blocked
+                    var doc = iframe.contentDocument || iframe.contentWindow.document;
+                    if (!doc || !doc.body || doc.body.innerHTML.length < 100) {
+                        iframe.style.display = 'none';
+                        fallback.style.display = 'flex';
+                    }
+                } catch(e) {
+                    // Cross-origin = blocked
+                    iframe.style.display = 'none';
+                    fallback.style.display = 'flex';
+                }
+            }, 4000);
+        })();
+        </script>
+        """, unsafe_allow_html=True)
 
     # Display prior chat messages (compact)
     for msg in st.session_state.messages:
