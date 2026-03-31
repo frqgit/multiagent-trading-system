@@ -768,7 +768,7 @@ def _render_analysis(r: dict):
 
     action = decision.get("action", "BUY")
     confidence = decision.get("confidence", 0)
-    badge_class = {"STRONG_BUY": "badge-buy", "BUY": "badge-buy", "STRONG_SELL": "badge-sell", "SELL": "badge-sell"}.get(action, "badge-sell")
+    badge_class = {"STRONG_BUY": "badge-buy", "BUY": "badge-buy", "STRONG_SELL": "badge-sell", "SELL": "badge-sell", "HOLD": "badge-hold"}.get(action, "badge-hold")
 
     symbol = r.get("symbol", "?")
     company = market.get("company_name", symbol)
@@ -2412,7 +2412,7 @@ with st.sidebar:
     # ===== ASX Quick Analyse =====
     st.markdown("### 🇦🇺 ASX Quick Analyse")
     asx_cols = st.columns(5)
-    for idx, sym in enumerate(ASX_TOP_STOCKS[:10]):
+    for idx, sym in enumerate(ASX_TOP_STOCKS[:20]):
         if asx_cols[idx % 5].button(sym, key=f"asx_{sym}", use_container_width=True):
             st.session_state["quick_input"] = f"Analyze {sym}.AX"
             st.session_state.show_admin = False

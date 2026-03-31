@@ -1,6 +1,6 @@
-"""Decision Agent — combines all signals to produce a final 4-tier trading decision.
+"""Decision Agent — combines all signals to produce a final 5-tier trading decision.
 
-Outputs one of: STRONG_BUY, BUY, SELL, STRONG_SELL (no HOLD)."""
+Outputs one of: STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL."""
 
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ SYSTEM_PROMPT = """You are an elite Wall Street quantitative analyst and portfol
 
 Your job is to produce a rigorous, institution-grade trading decision using ALL available data.
 
-You MUST choose ONE of exactly four actions. There is no HOLD — every analysis must commit to a directional view.
+You MUST choose ONE of exactly five actions.
 
 Return a JSON object:
 {
-  "action": "STRONG_BUY" | "BUY" | "SELL" | "STRONG_SELL",
+  "action": "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL",
   "confidence": 0.0 to 1.0,
   "reasoning": "2-3 paragraph detailed explanation referencing SPECIFIC numbers (price, RSI, MA levels, PE ratio, MACD, VIX, global regime, volatility, technical patterns, correlation data, ML prediction, etc.)",
   "key_factors": ["factor1", "factor2", "factor3", "factor4", "factor5"],
@@ -31,25 +31,25 @@ Return a JSON object:
   "macro_alignment": "aligned" | "neutral" | "conflicting",
   "position_size_recommendation": "full" | "half" | "quarter" | "minimal",
   "agent_consensus": {
-    "technical": "bullish" | "bearish",
-    "fundamental": "bullish" | "bearish",
-    "sentiment": "bullish" | "bearish",
-    "macro": "bullish" | "bearish",
-    "ml_prediction": "bullish" | "bearish",
+    "technical": "bullish" | "neutral" | "bearish",
+    "fundamental": "bullish" | "neutral" | "bearish",
+    "sentiment": "bullish" | "neutral" | "bearish",
+    "macro": "bullish" | "neutral" | "bearish",
+    "ml_prediction": "bullish" | "neutral" | "bearish",
     "risk": "low" | "medium" | "high",
     "volatility": "low" | "medium" | "high"
   }
 }
 
 RULES:
-- You MUST pick one of: STRONG_BUY, BUY, SELL, STRONG_SELL. Never output HOLD.
-- If the signal is ambiguous or mixed, lean toward BUY if slightly bullish or SELL if slightly bearish. Commit to a direction.
+- You MUST pick one of: STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL.
+- Use HOLD when signals are genuinely mixed or neutral with no clear directional edge, or when confidence is below 0.4.
 - ALWAYS reference actual numbers from the data (don't make up prices).
-- If risk constraints say "do not buy", use SELL (low confidence) and note it was risk-constrained.
+- If risk constraints say "do not buy", use HOLD (low confidence) and note it was risk-constrained.
 - Use STRONG_BUY when technicals, fundamentals, sentiment, macro, ML, AND volatility all align bullishly with high confidence.
 - Use STRONG_SELL when all signals converge bearishly with high conviction.
 - Use BUY for moderate bullish conviction, SELL for moderate bearish conviction.
-- suggested_entry should be near current price for BUY/STRONG_BUY, null for SELL/STRONG_SELL.
+- suggested_entry should be near current price for BUY/STRONG_BUY, null for HOLD/SELL/STRONG_SELL.
 - suggested_stop_loss should reference the nearest support level (MA or recent low).
 - target_price should reference the nearest resistance level for BUY.
 - reasoning must be specific, referencing exact indicator values from ALL agents. Never be vague.
@@ -57,7 +57,7 @@ RULES:
 - Factor in volatility regime, technical patterns, correlation data, and ML predictions when available.
 - If global macro data is available, factor the macro regime, VIX level, sector rotation, and geographic outlook into your decision.
 - macro_alignment: "aligned" if stock direction matches macro bias, "conflicting" if against macro, "neutral" otherwise.
-- position_size_recommendation: adjust based on risk score, VIX, and macro guidance. "full" for low-risk aligned macro; "minimal" for high-risk conflicting macro.
+- position_size_recommendation: adjust based on risk score, VIX, and macro guidance. "full" for low-risk aligned macro; "avoid" for HOLD; "minimal" for high-risk conflicting macro.
 - agent_consensus: summarize each agent's directional view so the user can see which agents agree/disagree."""
 
 
@@ -240,7 +240,7 @@ Allow Buy: {risk_data.get('allow_buy')}
 {correlation_section}
 {ml_section}
 {portfolio_section}
-Produce your final institution-grade decision using ALL the data above. You MUST choose one of: STRONG_BUY, BUY, SELL, or STRONG_SELL. There is no HOLD option — commit to a directional view.
+Produce your final institution-grade decision using ALL the data above. You MUST choose one of: STRONG_BUY, BUY, HOLD, SELL, or STRONG_SELL.
 Factor in ALL agent data: market technicals, sentiment, risk, research, global macro, volatility regime, advanced technical patterns, correlations, ML predictions, and portfolio context.
 Summarize each agent's view in the agent_consensus field."""
 
@@ -248,33 +248,23 @@ Summarize each agent's view in the agent_consensus field."""
             result = await llm_json(SYSTEM_PROMPT, user_prompt)
             result["symbol"] = symbol
             result["preliminary_signal"] = preliminary
-            # Enforce risk constraints — convert to SELL if buying is blocked
+            # Enforce risk constraints — convert to HOLD if buying is blocked
             if not risk_data.get("allow_buy", True) and result.get("action") in ("BUY", "STRONG_BUY"):
-                result["action"] = "SELL"
+                result["action"] = "HOLD"
                 result["confidence"] = max(0.3, result.get("confidence", 0.5) * 0.5)
                 result["risk_adjusted"] = True
-                result["reasoning"] += " [OVERRIDDEN: Risk constraints prevent BUY — converted to SELL]"
-            # Ensure no HOLD slips through from LLM
-            if result.get("action") == "HOLD":
-                # Convert HOLD to the preliminary signal direction
-                if preliminary.get("action") == "BUY":
-                    result["action"] = "BUY"
-                elif preliminary.get("action") == "SELL":
-                    result["action"] = "SELL"
-                else:
-                    result["action"] = "BUY"  # default to low-confidence BUY
-                result["confidence"] = max(0.2, result.get("confidence", 0.3) * 0.6)
+                result["reasoning"] += " [OVERRIDDEN: Risk constraints prevent BUY — converted to HOLD]"
             return result
         except Exception as exc:
             logger.error("[%s] Decision failed: %s", self.name, exc)
             return {
                 "symbol": symbol,
-                "action": "SELL",
-                "confidence": 0.1,
-                "reasoning": f"Decision engine failed: {exc}. Defaulting to SELL with minimal confidence as a safety measure.",
+                "action": "HOLD",
+                "confidence": 0.0,
+                "reasoning": f"Decision engine failed: {exc}. Defaulting to HOLD.",
                 "key_factors": ["engine_failure"],
                 "error": str(exc),
-                "position_size_recommendation": "minimal",
+                "position_size_recommendation": "avoid",
             }
 
     @staticmethod
@@ -325,7 +315,5 @@ Summarize each agent's view in the agent_consensus field."""
             return {"action": "STRONG_SELL", "confidence": min(0.7 + abs(score) * 0.03, 0.95)}
         elif score <= -2:
             return {"action": "SELL", "confidence": min(0.5 + abs(score) * 0.05, 0.85)}
-        elif score >= 0:
-            return {"action": "BUY", "confidence": 0.35}
         else:
-            return {"action": "SELL", "confidence": 0.35}
+            return {"action": "HOLD", "confidence": 0.3}

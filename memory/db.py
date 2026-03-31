@@ -218,7 +218,7 @@ async def save_analysis(result: dict) -> str:
     decision = result.get("decision", {})
     record = AnalysisRecord(
         symbol=result.get("symbol", ""),
-        action=decision.get("action", "BUY"),
+        action=decision.get("action", "HOLD"),
         confidence=decision.get("confidence", 0),
         reasoning=decision.get("reasoning", ""),
         market_data=result.get("market_data"),

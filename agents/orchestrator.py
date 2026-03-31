@@ -457,7 +457,7 @@ Give a clear, concise answer to the user's question. Include key numbers (price,
             d = r.get("decision", {})
             agents_count = len(r.get("agents_used", []))
             summaries.append(
-                f"**{r.get('symbol', '?')}**: {d.get('action', 'BUY')} "
+                f"**{r.get('symbol', '?')}**: {d.get('action', 'HOLD')} "
                 f"(confidence {d.get('confidence', 0):.0%}, {agents_count} agents)"
             )
 
@@ -1613,11 +1613,11 @@ Fetched Page Content:
             logger.error("[%s] Decision failed for %s: %s", self.name, symbol, exc)
             decision = {
                 "symbol": symbol,
-                "action": "SELL",
-                "confidence": 0.1,
-                "reasoning": f"Decision engine timed out or failed: {exc}. Defaulting to SELL with minimal confidence.",
+                "action": "HOLD",
+                "confidence": 0.0,
+                "reasoning": f"Decision engine timed out or failed: {exc}. Defaulting to HOLD.",
                 "key_factors": ["engine_failure"],
-                "position_size_recommendation": "minimal",
+                "position_size_recommendation": "avoid",
             }
 
         elapsed = round(time.monotonic() - start, 2)

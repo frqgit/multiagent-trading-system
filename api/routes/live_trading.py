@@ -56,7 +56,7 @@ class BracketOrderRequest(BaseModel):
 
 class SignalExecutionRequest(BaseModel):
     symbol: str
-    action: str = Field(..., description="STRONG_BUY, BUY, SELL, STRONG_SELL")
+    action: str = Field(..., description="STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL")
     confidence: float = Field(..., ge=0, le=1)
     entry_price: float | None = None
     stop_loss: float | None = None

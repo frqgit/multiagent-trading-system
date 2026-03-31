@@ -64,7 +64,7 @@ class LiveExecutionAgent:
         Returns:
             Execution result including order details and risk metrics.
         """
-        action = signal.get("action", "BUY").upper()
+        action = signal.get("action", "HOLD").upper()
         confidence = signal.get("confidence", 0)
 
         # Very low confidence → do not execute
@@ -76,10 +76,14 @@ class LiveExecutionAgent:
                 "confidence": confidence,
             }
 
-        # Convert any HOLD that slipped through to the default direction
+        # HOLD → do nothing
         if action == "HOLD":
-            action = "BUY"  # safe default
-            confidence = max(0.15, confidence * 0.5)
+            return {
+                "executed": False,
+                "reason": "HOLD signal — no trade executed",
+                "action": action,
+                "confidence": confidence,
+            }
 
         side = "BUY" if action in ("BUY", "STRONG_BUY") else "SELL"
         entry_price = signal.get("entry_price", 0)
