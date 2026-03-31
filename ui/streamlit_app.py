@@ -279,7 +279,7 @@ st.markdown("""
         border-radius: 14px;
         overflow: hidden;
         box-shadow: var(--shadow-glow);
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
     .market-widget-header {
         display: flex;
@@ -329,7 +329,7 @@ st.markdown("""
     }
     .market-iframe-wrap {
         width: 100%;
-        height: 260px;
+        height: 210px;
         position: relative;
         background: #0a0a0a;
     }
@@ -624,8 +624,8 @@ st.markdown("""
         div[data-testid="column"] { padding-left: 4px !important; padding-right: 4px !important; }
         .block-container { padding-left: 1rem !important; padding-right: 1rem !important; padding-top: 1rem !important; }
 
-        .market-widget { margin-bottom: 8px; }
-        .market-iframe-wrap { height: 200px; }
+        .market-widget { margin-bottom: 6px; }
+        .market-iframe-wrap { height: 160px; }
     }
 
     @media (max-width: 480px) {
@@ -2256,35 +2256,6 @@ def _render_landing_page():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ===== SAMPLE BROKERS PREVIEW =====
-    st.markdown("""
-    <div class="main-header" style="text-align:center;">
-        <h1>🏦 Trade Through Australia's Best Brokers</h1>
-        <p>We provide the intelligence — execute trades where you're comfortable</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    preview_brokers = ["CommSec", "CMC Markets", "IG Markets", "Stake", "SelfWealth", "Interactive Brokers"]
-    broker_html = '<div class="broker-grid">'
-    for bname in preview_brokers:
-        info = AUSTRALIAN_BROKERS[bname]
-        markets_html = "".join(f'<span class="broker-market-tag">{m}</span>' for m in info["markets"][:4])
-        broker_html += f"""
-        <div class="broker-card">
-            <div class="broker-header">
-                <span class="broker-icon">{info['icon']}</span>
-                <span class="broker-name">{bname}</span>
-                <span class="broker-type">{info['type']}</span>
-            </div>
-            <div class="broker-desc">{info['desc']}</div>
-            <div class="broker-markets">{markets_html}</div>
-        </div>
-        """
-    broker_html += "</div>"
-    st.markdown(broker_html, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
     # ===== LOGIN / REGISTER =====
     st.markdown("""
     <div class="main-header" style="text-align:center;">
@@ -2633,7 +2604,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Live Market Widgets (top-right) — Bloomberg, Trading Economics, Yahoo Finance
+    # Live Market Widgets (top-right) — Bloomberg, Trading Economics, Yahoo Finance, Market Index AU
     _bb_left, _bb_right = st.columns([3, 2])
     with _bb_right:
         # --- Bloomberg Markets ---
@@ -2760,6 +2731,50 @@ else:
         <script>
         (function(){
             var w=document.getElementById('mw-yf');if(!w)return;
+            var f=w.querySelector('iframe'),fb=w.querySelector('.market-fallback');
+            setTimeout(function(){try{var d=f.contentDocument||f.contentWindow.document;
+            if(!d||!d.body||d.body.innerHTML.length<100){f.style.display='none';fb.style.display='flex';}}
+            catch(e){f.style.display='none';fb.style.display='flex';}},4000);
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+
+        # --- Market Index Australia ---
+        st.markdown("""
+        <div class="market-widget">
+            <div class="market-widget-header">
+                <span class="market-widget-title">
+                    <span class="mw-dot"></span>
+                    🇦🇺 Market Index Australia
+                </span>
+                <a class="market-open-btn"
+                   href="https://www.marketindex.com.au"
+                   target="_blank" rel="noopener noreferrer">
+                    Open ↗
+                </a>
+            </div>
+            <div class="market-iframe-wrap" id="mw-mi">
+                <iframe
+                    src="https://www.marketindex.com.au"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                ></iframe>
+                <div class="market-fallback">
+                    <div class="mf-icon">🇦🇺</div>
+                    <div class="mf-text">
+                        Live preview blocked by site security policy.<br>
+                        <a href="https://www.marketindex.com.au" target="_blank"
+                           rel="noopener noreferrer" style="color:var(--accent-blue);text-decoration:underline;">
+                            Open Market Index Australia →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function(){
+            var w=document.getElementById('mw-mi');if(!w)return;
             var f=w.querySelector('iframe'),fb=w.querySelector('.market-fallback');
             setTimeout(function(){try{var d=f.contentDocument||f.contentWindow.document;
             if(!d||!d.body||d.body.innerHTML.length<100){f.style.display='none';fb.style.display='flex';}}
