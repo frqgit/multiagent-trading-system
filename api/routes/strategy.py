@@ -35,6 +35,7 @@ class BacktestStrategyRequest(BaseModel):
     strategy_type: str
     parameters: dict = Field(default_factory=dict)
     symbol: str = Field(..., description="Stock symbol to backtest against")
+    period: str = Field("1y", description="Data period: 3mo, 6mo, 1y, 2y, 5y")
     initial_capital: float = Field(100000, gt=0)
 
 
@@ -173,19 +174,27 @@ async def backtest_strategy(req: BacktestStrategyRequest, authorization: str = H
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Fetch historical prices
+    # Fetch live market data via yfinance
     import asyncio
-    from tools.stock_api import fetch_stock_data
+    import yfinance as yf
+
+    def _download():
+        df = yf.download(req.symbol, period=req.period, interval="1d", progress=False)
+        if df is not None and hasattr(df.columns, 'levels') and df.columns.nlevels > 1:
+            df.columns = df.columns.get_level_values(0)
+        return df
 
     try:
-        snapshot = await asyncio.to_thread(fetch_stock_data, req.symbol)
-        prices = snapshot.price_history_30d
-        if not prices or len(prices) < 60:
-            raise HTTPException(status_code=400, detail="Insufficient price data for backtesting (need 60+ data points)")
+        df = await asyncio.to_thread(_download)
+        if df is None or df.empty:
+            raise HTTPException(status_code=400, detail=f"No live data found for {req.symbol}")
+        prices = df["Close"].dropna().tolist()
+        if len(prices) < 60:
+            raise HTTPException(status_code=400, detail=f"Insufficient live data for backtesting: got {len(prices)} bars, need 60+")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not fetch data for {req.symbol}: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not fetch live data for {req.symbol}: {e}")
 
     from agents.strategy_builder import StrategyBuilderAgent
     builder = StrategyBuilderAgent()
@@ -201,4 +210,4 @@ async def backtest_strategy(req: BacktestStrategyRequest, authorization: str = H
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
 
-    return {"backtest_results": result}
+    return {"results": result}

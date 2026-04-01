@@ -1880,12 +1880,8 @@ def _render_strategy_page():
                     equity = results.get("equity_curve", [])
                     if equity:
                         import pandas as pd
-                        eq_df = pd.DataFrame(equity)
-                        if "date" in eq_df.columns and "equity" in eq_df.columns:
-                            eq_df["date"] = pd.to_datetime(eq_df["date"])
-                            eq_df = eq_df.sort_values("date")
-                            st.markdown("#### 📈 Equity Curve")
-                            st.line_chart(eq_df.set_index("date")["equity"], use_container_width=True)
+                        st.markdown("#### 📈 Equity Curve")
+                        st.line_chart(pd.Series(equity, name="Equity"))
 
                     # More details
                     with st.expander("📊 Detailed Results"):

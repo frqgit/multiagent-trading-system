@@ -232,19 +232,20 @@ class StrategyBuilderAgent:
             "strategy_type": strategy_type,
             "parameters": params,
             "total_return": float(total_return),
-            "total_return_pct": f"{total_return:.2%}",
+            "total_return_pct": round(float(total_return) * 100, 2),
             "final_capital": float(capital),
-            "sharpe_ratio": sharpe,
+            "sharpe_ratio": round(sharpe, 3),
             "max_drawdown": max_drawdown,
-            "max_drawdown_pct": f"{max_drawdown:.2%}",
+            "max_drawdown_pct": round(float(max_drawdown) * 100, 2),
             "total_trades": len(trades),
-            "win_rate": win_rate,
-            "profit_factor": profit_factor,
+            "win_rate": round(win_rate * 100, 1),
+            "profit_factor": round(profit_factor, 3),
             "avg_win": float(avg_win),
             "avg_loss": float(avg_loss),
             "best_trade": max([t["return_pct"] for t in trades], default=0),
             "worst_trade": min([t["return_pct"] for t in trades], default=0),
             "trades": trades[-20:],  # Last 20 trades
+            "equity_curve": equity_curve,
         }
 
     def _generate_signals(self, strategy_type: str, params: dict, prices: np.ndarray) -> list[int]:
