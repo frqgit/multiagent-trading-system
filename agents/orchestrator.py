@@ -147,7 +147,7 @@ RULES:
 - If user says "trade", "buy", "sell", "order", "portfolio", "position", "execute", "paper" — use "execution".
 - If user says "strategy", "create strategy", "build strategy", "strategy template", "custom strategy", "strategy builder" — use "strategy_builder".
 - If user says "ml predict", "machine learning", "ai prediction", "quantitative", "model prediction", "forecast model" — use "ml_prediction".
-- If user says "engine", "run engine", "engine backtest", "engine signals", "golden cross", "rsi reversion", "macd crossover", "bollinger squeeze", "supertrend", "donchian breakout", "keltner", "adx trend", "ichimoku cloud strategy", "engine strategy", "built-in strategy" — use "engine".
+- If user says "engine", "run engine", "engine backtest", "engine signals", "golden cross", "rsi reversion", "macd crossover", "bollinger squeeze", "supertrend", "donchian breakout", "keltner", "adx trend", "ichimoku cloud strategy", "engine strategy", "built-in strategy", "live signals", "live backtest" — use "engine".
 - exchange_hint: if the stock is on a specific exchange (e.g. ASX, LSE), include it.
 - NEVER leave symbols empty if the user mentions ANY stock or company."""
 
@@ -1425,22 +1425,47 @@ Fetched Page Content:
         strategy = BUILTIN_STRATEGIES[strategy_name]
         symbol = symbols[0] if symbols else "AAPL"
 
-        # Fetch data
+        # Parse user-requested period from query (default 1y)
+        period = "1y"
+        period_map = {
+            "5 year": "5y", "5y": "5y", "five year": "5y",
+            "3 year": "3y", "3y": "3y", "three year": "3y",
+            "2 year": "2y", "2y": "2y", "two year": "2y",
+            "1 year": "1y", "1y": "1y", "one year": "1y",
+            "6 month": "6mo", "6mo": "6mo", "six month": "6mo",
+            "3 month": "3mo", "3mo": "3mo", "three month": "3mo",
+            "1 month": "1mo", "1mo": "1mo", "one month": "1mo",
+            "ytd": "ytd", "year to date": "ytd",
+            "max": "max", "all time": "max", "all data": "max",
+        }
+        for keyword, p in period_map.items():
+            if keyword in q_lower:
+                period = p
+                break
+
+        # Parse interval
+        interval = "1d"
+        if "weekly" in q_lower or "1wk" in q_lower:
+            interval = "1wk"
+        elif "monthly" in q_lower or "1mo interval" in q_lower:
+            interval = "1mo"
+
+        # Fetch live market data
         try:
-            df = yf.download(symbol, period="1y", interval="1d", progress=False)
+            df = yf.download(symbol, period=period, interval=interval, progress=False)
             if hasattr(df.columns, 'levels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
         except Exception as e:
             return {
                 "type": "engine",
-                "answer": f"## ⚙️ Engine Error\n\nFailed to fetch data for {symbol}: {e}",
+                "answer": f"## ⚙️ Engine Error\n\nFailed to fetch live data for {symbol}: {e}",
                 "symbols": symbols,
             }
 
         if df is None or df.empty:
             return {
                 "type": "engine",
-                "answer": f"## ⚙️ Engine\n\nNo data available for **{symbol}**.",
+                "answer": f"## ⚙️ Engine\n\nNo live data available for **{symbol}**. Check the symbol is valid.",
                 "symbols": symbols,
             }
 
@@ -1454,7 +1479,7 @@ Fetched Page Content:
 
             answer_parts = [
                 f"## ⚙️ Engine Backtest — {strategy.name}",
-                f"**Symbol:** {symbol} | **Period:** {summary['period']}",
+                f"**Symbol:** {symbol} | **Period:** {summary['period']} | **Live Data**",
                 f"**Total Bars:** {summary['total_bars']}\n",
                 "### Performance",
                 f"| Metric | Value |",
@@ -1497,7 +1522,7 @@ Fetched Page Content:
 
             answer_parts = [
                 f"## ⚙️ Engine Signals — {strategy.name}",
-                f"**Symbol:** {symbol} | **Period:** 1Y | **Total Bars:** {len(df)}\n",
+                f"**Symbol:** {symbol} | **Period:** {period.upper()} | **Interval:** {interval} | **Live Data** | **Total Bars:** {len(df)}\n",
                 f"**Total Signals:** {len(signals)}\n",
             ]
 

@@ -1,6 +1,6 @@
 """Strategy Framework — define, parse, validate and execute trading strategies.
 
-AmiBroker-style strategy scripting using safe Python expressions.
+Strategy scripting using safe Python expressions.
 
 Usage:
     from engine.strategy import Strategy, StrategyEngine
@@ -49,7 +49,7 @@ class Signal(int, Enum):
 
 @dataclass
 class Strategy:
-    """Declarative strategy definition (AmiBroker-style)."""
+    """Declarative strategy definition."""
 
     name: str
     description: str = ""

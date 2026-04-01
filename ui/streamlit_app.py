@@ -1941,11 +1941,11 @@ def _render_strategy_page():
 
 
 def _render_engine_page():
-    """Render the AmiBroker-like Trading Engine page."""
+    """Render the Trading Engine page."""
     st.markdown("""
     <div class="main-header">
         <h1>🔬 Trading Engine</h1>
-        <p>AmiBroker-style quantitative engine — built-in strategies, backtesting, signals & portfolio sizing.</p>
+        <p>Quantitative trading engine with live market data — built-in strategies, backtesting, signals & portfolio sizing.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2100,7 +2100,7 @@ def _render_engine_page():
     # ── Custom Strategy Tab ───────────────────────────────────────────────
     with tab_custom:
         st.markdown("### Write Custom Strategy Expressions")
-        st.caption("Use AmiBroker-style expressions with Python syntax. Available: `C` (Close), `H` (High), `L` (Low), `O` (Open), `V` (Volume), plus all indicators like `RSI(C,14)`, `EMA(C,20)`, `CrossAbove(...)`, etc.")
+        st.caption("Write strategy expressions with Python syntax. Available: `C` (Close), `H` (High), `L` (Low), `O` (Open), `V` (Volume), plus all indicators like `RSI(C,14)`, `EMA(C,20)`, `CrossAbove(...)`, etc.")
 
         cc1, cc2 = st.columns(2)
         with cc1:
@@ -2637,7 +2637,7 @@ with st.sidebar:
     # Navigation buttons - row 3
     nav_cols3 = st.columns(3)
     if nav_cols3[0].button("🔬 Engine", use_container_width=True,
-                           help="AmiBroker-like Trading Engine"):
+                           help="Live Trading Engine"):
         st.session_state.active_page = "engine"
         st.session_state.show_admin = False
         st.session_state.show_brokers = False

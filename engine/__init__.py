@@ -1,4 +1,4 @@
-"""TradingEdge Engine — AmiBroker-like quantitative trading engine.
+"""TradingEdge Engine — quantitative trading engine with live market data.
 
 Modules:
     indicators  — Technical indicator library (RSI, MACD, MA, Bollinger, ATR, etc.)
