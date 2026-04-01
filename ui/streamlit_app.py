@@ -1940,6 +1940,206 @@ def _render_strategy_page():
             st.warning(f"Could not load strategies: {e}")
 
 
+def _render_engine_page():
+    """Render the AmiBroker-like Trading Engine page."""
+    st.markdown("""
+    <div class="main-header">
+        <h1>🔬 Trading Engine</h1>
+        <p>AmiBroker-style quantitative engine — built-in strategies, backtesting, signals & portfolio sizing.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_signals, tab_backtest, tab_sizing, tab_custom = st.tabs([
+        "📡 Signals", "📊 Backtest", "📐 Position Sizing", "✏️ Custom Strategy"
+    ])
+
+    # ── Signals Tab ───────────────────────────────────────────────────────
+    with tab_signals:
+        st.markdown("### Generate Trading Signals")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            engine_symbol = st.text_input("Symbol", "BHP.AX", key="eng_sig_sym")
+        with sc2:
+            engine_strat = st.selectbox("Strategy", [
+                "golden_cross", "rsi_reversion", "macd_crossover", "bollinger_squeeze",
+                "supertrend_follow", "triple_ema", "donchian_breakout",
+                "keltner_mean_revert", "adx_trend_strength", "ichimoku_cloud",
+            ], key="eng_sig_strat")
+        with sc3:
+            engine_period = st.selectbox("Period", ["3mo", "6mo", "1y", "2y", "5y"], index=2, key="eng_sig_per")
+
+        if st.button("🚀 Generate Signals", use_container_width=True, key="eng_sig_btn"):
+            with st.spinner("Running engine..."):
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.post(
+                            f"{API_BASE}/engine/signals",
+                            json={"symbol": engine_symbol, "strategy_name": engine_strat, "period": engine_period},
+                            headers=_bypass_headers(),
+                        )
+                    data = resp.json()
+                    if resp.status_code == 200:
+                        st.success(f"**{data.get('signals_count', 0)}** signals generated for {engine_symbol}")
+                        signals = data.get("signals", [])
+                        if signals:
+                            import pandas as pd
+                            df_sig = pd.DataFrame(signals)
+                            st.dataframe(df_sig, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No signals in this period.")
+                    else:
+                        st.error(f"Error: {data.get('detail', resp.text)}")
+                except Exception as e:
+                    st.error(f"Request failed: {e}")
+
+    # ── Backtest Tab ──────────────────────────────────────────────────────
+    with tab_backtest:
+        st.markdown("### Backtest Strategy")
+        bc1, bc2, bc3, bc4 = st.columns(4)
+        with bc1:
+            bt_symbol = st.text_input("Symbol", "BHP.AX", key="eng_bt_sym")
+        with bc2:
+            bt_strat = st.selectbox("Strategy", [
+                "golden_cross", "rsi_reversion", "macd_crossover", "bollinger_squeeze",
+                "supertrend_follow", "triple_ema", "donchian_breakout",
+                "keltner_mean_revert", "adx_trend_strength", "ichimoku_cloud",
+            ], key="eng_bt_strat")
+        with bc3:
+            bt_period = st.selectbox("Period", ["6mo", "1y", "2y", "5y"], index=2, key="eng_bt_per")
+        with bc4:
+            bt_capital = st.number_input("Capital $", value=100000, min_value=1000, step=10000, key="eng_bt_cap")
+
+        if st.button("🧪 Run Backtest", use_container_width=True, key="eng_bt_btn"):
+            with st.spinner("Backtesting..."):
+                try:
+                    with httpx.Client(timeout=60) as client:
+                        resp = client.post(
+                            f"{API_BASE}/engine/backtest",
+                            json={
+                                "symbol": bt_symbol, "strategy_name": bt_strat,
+                                "period": bt_period, "initial_capital": bt_capital,
+                            },
+                            headers=_bypass_headers(),
+                        )
+                    data = resp.json()
+                    if resp.status_code == 200:
+                        summary = data.get("summary", {})
+
+                        # Performance metrics
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Total Return", summary.get("total_return", "N/A"))
+                        m2.metric("Sharpe Ratio", summary.get("sharpe_ratio", "N/A"))
+                        m3.metric("Max Drawdown", summary.get("max_drawdown", "N/A"))
+                        m4.metric("Win Rate", summary.get("win_rate", "N/A"))
+
+                        m5, m6, m7, m8 = st.columns(4)
+                        m5.metric("Total Trades", summary.get("total_trades", 0))
+                        m6.metric("Profit Factor", summary.get("profit_factor", "N/A"))
+                        m7.metric("Annual Return", summary.get("annual_return", "N/A"))
+                        m8.metric("Expectancy", f"${summary.get('expectancy', 0)}")
+
+                        # Equity curve
+                        eq = data.get("equity_curve", [])
+                        if eq:
+                            import pandas as pd
+                            st.markdown("#### Equity Curve")
+                            st.line_chart(pd.Series(eq, name="Equity"))
+
+                        # Trade log
+                        trades = data.get("trades", [])
+                        if trades:
+                            import pandas as pd
+                            st.markdown("#### Recent Trades")
+                            st.dataframe(pd.DataFrame(trades), use_container_width=True, hide_index=True)
+                    else:
+                        st.error(f"Error: {data.get('detail', resp.text)}")
+                except Exception as e:
+                    st.error(f"Request failed: {e}")
+
+    # ── Position Sizing Tab ───────────────────────────────────────────────
+    with tab_sizing:
+        st.markdown("### Calculate Position Size")
+        ps1, ps2, ps3 = st.columns(3)
+        with ps1:
+            ps_price = st.number_input("Entry Price $", value=50.0, min_value=0.01, step=1.0, key="eng_ps_px")
+        with ps2:
+            ps_method = st.selectbox("Method", [
+                "pct_risk", "pct_equity", "fixed", "kelly", "equal_weight", "volatility"
+            ], key="eng_ps_method")
+        with ps3:
+            ps_equity = st.number_input("Equity $", value=100000, min_value=1000, step=10000, key="eng_ps_eq")
+
+        ps4, ps5 = st.columns(2)
+        with ps4:
+            ps_risk = st.slider("Risk per Trade %", 0.5, 10.0, 2.0, 0.5, key="eng_ps_risk")
+        with ps5:
+            ps_stop = st.number_input("Stop Distance $", value=2.0, min_value=0.0, step=0.5, key="eng_ps_stop")
+
+        if st.button("📐 Calculate", use_container_width=True, key="eng_ps_btn"):
+            try:
+                with httpx.Client(timeout=10) as client:
+                    resp = client.post(
+                        f"{API_BASE}/engine/position-size",
+                        json={
+                            "price": ps_price, "method": ps_method, "equity": ps_equity,
+                            "risk_per_trade_pct": ps_risk / 100, "stop_distance": ps_stop,
+                        },
+                        headers=_bypass_headers(),
+                    )
+                data = resp.json()
+                if resp.status_code == 200:
+                    r1, r2, r3 = st.columns(3)
+                    r1.metric("Shares", data.get("shares", 0))
+                    r2.metric("Position Value", f"${data.get('position_value', 0):,.2f}")
+                    r3.metric("Portfolio %", f"{data.get('position_pct', 0):.1f}%")
+                else:
+                    st.error(f"Error: {data.get('detail', resp.text)}")
+            except Exception as e:
+                st.error(f"Request failed: {e}")
+
+    # ── Custom Strategy Tab ───────────────────────────────────────────────
+    with tab_custom:
+        st.markdown("### Write Custom Strategy Expressions")
+        st.caption("Use AmiBroker-style expressions with Python syntax. Available: `C` (Close), `H` (High), `L` (Low), `O` (Open), `V` (Volume), plus all indicators like `RSI(C,14)`, `EMA(C,20)`, `CrossAbove(...)`, etc.")
+
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            cs_symbol = st.text_input("Symbol", "AAPL", key="eng_cs_sym")
+            cs_entry_long = st.text_area("Entry Long", "CrossAbove(EMA(C, 10), EMA(C, 30))", key="eng_cs_el")
+            cs_entry_short = st.text_area("Entry Short (optional)", "", key="eng_cs_es")
+        with cc2:
+            cs_period = st.selectbox("Period", ["3mo", "6mo", "1y", "2y"], index=2, key="eng_cs_per")
+            cs_exit_long = st.text_area("Exit Long", "CrossBelow(EMA(C, 10), EMA(C, 30))", key="eng_cs_xl")
+            cs_exit_short = st.text_area("Exit Short (optional)", "", key="eng_cs_xs")
+
+        if st.button("📡 Run Custom Strategy", use_container_width=True, key="eng_cs_btn"):
+            with st.spinner("Evaluating custom strategy..."):
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.post(
+                            f"{API_BASE}/engine/signals/custom",
+                            json={
+                                "symbol": cs_symbol, "period": cs_period,
+                                "entry_long": cs_entry_long, "exit_long": cs_exit_long,
+                                "entry_short": cs_entry_short, "exit_short": cs_exit_short,
+                            },
+                            headers=_bypass_headers(),
+                        )
+                    data = resp.json()
+                    if resp.status_code == 200:
+                        st.success(f"**{data.get('signals_count', 0)}** signals generated")
+                        signals = data.get("signals", [])
+                        if signals:
+                            import pandas as pd
+                            st.dataframe(pd.DataFrame(signals), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No signals generated for this strategy/period.")
+                    else:
+                        st.error(f"Error: {data.get('detail', resp.text)}")
+                except Exception as e:
+                    st.error(f"Request failed: {e}")
+
+
 def _render_landing_page():
     """Render the eToro/AvaTrade-style landing page for unauthenticated users."""
 
@@ -2434,6 +2634,15 @@ with st.sidebar:
         st.session_state.show_brokers = False
         st.rerun()
 
+    # Navigation buttons - row 3
+    nav_cols3 = st.columns(3)
+    if nav_cols3[0].button("🔬 Engine", use_container_width=True,
+                           help="AmiBroker-like Trading Engine"):
+        st.session_state.active_page = "engine"
+        st.session_state.show_admin = False
+        st.session_state.show_brokers = False
+        st.rerun()
+
     btn_cols_extra = []
     if user["role"] == "admin":
         if nav_cols2[2].button("🔧 Admin", use_container_width=True):
@@ -2581,6 +2790,8 @@ elif st.session_state.active_page == "ibkr":
     _render_ibkr_page()
 elif st.session_state.active_page == "strategies":
     _render_strategy_page()
+elif st.session_state.active_page == "engine":
+    _render_engine_page()
 else:
     # ---------------------------------------------------------------------------
     # Main area — AI Advisory Chat + Dashboard hybrid

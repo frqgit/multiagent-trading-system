@@ -17,6 +17,7 @@ from api.routes.billing import router as billing_router
 from api.routes.ibkr import router as ibkr_router
 from api.routes.live_trading import router as live_trading_router
 from api.routes.strategy import router as strategy_router
+from api.routes.engine import router as engine_router
 from api.routes.trading import router as trading_router
 from core.logging_config import setup_logging
 
@@ -91,6 +92,7 @@ app.include_router(billing_router)
 app.include_router(ibkr_router)
 app.include_router(live_trading_router)
 app.include_router(strategy_router)
+app.include_router(engine_router)
 
 
 @app.get("/")

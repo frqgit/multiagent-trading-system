@@ -106,7 +106,7 @@ _ROUTER_SYSTEM = """You are a financial query router. Given a user message, clas
 
 Return JSON:
 {
-  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook" | "portfolio_optimization" | "backtest" | "volatility_analysis" | "technical_analysis" | "correlation_analysis" | "execution" | "strategy_builder" | "ml_prediction",
+  "intent": "quick_status" | "full_analysis" | "general_question" | "comparison" | "news_query" | "global_outlook" | "portfolio_optimization" | "backtest" | "volatility_analysis" | "technical_analysis" | "correlation_analysis" | "execution" | "strategy_builder" | "ml_prediction" | "engine",
   "symbols": ["AAPL"],
   "query": "the original question rephrased for clarity",
   "exchange_hint": "ASX" | "NYSE" | "NASDAQ" | "LSE" | "" 
@@ -147,6 +147,7 @@ RULES:
 - If user says "trade", "buy", "sell", "order", "portfolio", "position", "execute", "paper" — use "execution".
 - If user says "strategy", "create strategy", "build strategy", "strategy template", "custom strategy", "strategy builder" — use "strategy_builder".
 - If user says "ml predict", "machine learning", "ai prediction", "quantitative", "model prediction", "forecast model" — use "ml_prediction".
+- If user says "engine", "run engine", "engine backtest", "engine signals", "golden cross", "rsi reversion", "macd crossover", "bollinger squeeze", "supertrend", "donchian breakout", "keltner", "adx trend", "ichimoku cloud strategy", "engine strategy", "built-in strategy" — use "engine".
 - exchange_hint: if the stock is on a specific exchange (e.g. ASX, LSE), include it.
 - NEVER leave symbols empty if the user mentions ANY stock or company."""
 
@@ -291,6 +292,8 @@ class OrchestratorAgent:
             result = await self._handle_global_outlook(symbols, query)
         elif intent == "ml_prediction" and symbols:
             result = await self._handle_ml_prediction(symbols, query)
+        elif intent == "engine":
+            result = await self._handle_engine(symbols, query)
         elif intent == "strategy_builder":
             result = await self._handle_strategy_builder(symbols, query)
         elif intent == "portfolio_optimization" and symbols:
@@ -1399,6 +1402,133 @@ Fetched Page Content:
             "predictions": results,
             "symbols": symbols,
         }
+
+    # ── Engine Handler ────────────────────────────────────────────────────
+    async def _handle_engine(self, symbols: list[str], query: str) -> dict[str, Any]:
+        """Handle engine queries — run built-in strategies, backtest, signals."""
+        logger.info("[%s] Engine query: %s, symbols=%s", self.name, query, symbols)
+
+        from engine.strategy import BUILTIN_STRATEGIES, StrategyEngine
+        from engine.backtest import Backtester, BacktestConfig
+        import yfinance as yf
+
+        # Detect which strategy user wants
+        q_lower = query.lower()
+        strategy_name = None
+        for name in BUILTIN_STRATEGIES:
+            if name.replace("_", " ") in q_lower or name in q_lower:
+                strategy_name = name
+                break
+        if not strategy_name:
+            strategy_name = "golden_cross"  # default
+
+        strategy = BUILTIN_STRATEGIES[strategy_name]
+        symbol = symbols[0] if symbols else "AAPL"
+
+        # Fetch data
+        try:
+            df = yf.download(symbol, period="1y", interval="1d", progress=False)
+            if hasattr(df.columns, 'levels') and df.columns.nlevels > 1:
+                df.columns = df.columns.get_level_values(0)
+        except Exception as e:
+            return {
+                "type": "engine",
+                "answer": f"## ⚙️ Engine Error\n\nFailed to fetch data for {symbol}: {e}",
+                "symbols": symbols,
+            }
+
+        if df is None or df.empty:
+            return {
+                "type": "engine",
+                "answer": f"## ⚙️ Engine\n\nNo data available for **{symbol}**.",
+                "symbols": symbols,
+            }
+
+        # Decide: backtest or signals
+        wants_backtest = any(kw in q_lower for kw in ["backtest", "test", "performance", "monte carlo", "walk forward"])
+
+        if wants_backtest:
+            bt = Backtester(BacktestConfig(initial_capital=100_000))
+            result = bt.run(strategy, df, symbol)
+            summary = result.summary()
+
+            answer_parts = [
+                f"## ⚙️ Engine Backtest — {strategy.name}",
+                f"**Symbol:** {symbol} | **Period:** {summary['period']}",
+                f"**Total Bars:** {summary['total_bars']}\n",
+                "### Performance",
+                f"| Metric | Value |",
+                f"|--------|-------|",
+                f"| Total Return | {summary['total_return']} |",
+                f"| Annual Return | {summary['annual_return']} |",
+                f"| Sharpe Ratio | {summary['sharpe_ratio']} |",
+                f"| Sortino Ratio | {summary['sortino_ratio']} |",
+                f"| Max Drawdown | {summary['max_drawdown']} |",
+                f"| Volatility | {summary['volatility']} |",
+                "",
+                "### Trade Statistics",
+                f"| Metric | Value |",
+                f"|--------|-------|",
+                f"| Total Trades | {summary['total_trades']} |",
+                f"| Win Rate | {summary['win_rate']} |",
+                f"| Profit Factor | {summary['profit_factor']} |",
+                f"| Expectancy | ${summary['expectancy']} |",
+                f"| Avg Win | {summary['avg_win']} |",
+                f"| Avg Loss | {summary['avg_loss']} |",
+                f"| Max Consecutive Wins | {summary['max_consecutive_wins']} |",
+                f"| Max Consecutive Losses | {summary['max_consecutive_losses']} |",
+                "",
+                f"**Initial Capital:** ${summary['initial_capital']:,.2f} → **Final:** ${summary['final_capital']:,.2f}",
+            ]
+
+            return {
+                "type": "engine_backtest",
+                "answer": "\n".join(answer_parts),
+                "backtest_summary": summary,
+                "equity_curve": result.equity_curve[-252:],
+                "trades_count": len(result.trades),
+                "symbols": symbols,
+            }
+        else:
+            # Generate signals
+            engine = StrategyEngine()
+            signals = engine.generate_signals_list(strategy, df)
+            recent = signals[-10:] if signals else []
+
+            answer_parts = [
+                f"## ⚙️ Engine Signals — {strategy.name}",
+                f"**Symbol:** {symbol} | **Period:** 1Y | **Total Bars:** {len(df)}\n",
+                f"**Total Signals:** {len(signals)}\n",
+            ]
+
+            if recent:
+                answer_parts.append("### Recent Signals")
+                answer_parts.append("| Date | Signal |")
+                answer_parts.append("|------|--------|")
+                for s in recent:
+                    answer_parts.append(f"| {s['date']} | {s['signal']} |")
+            else:
+                answer_parts.append("_No signals generated in the selected period._")
+
+            answer_parts.extend([
+                "",
+                f"**Strategy Rules:**",
+                f"- Entry Long: `{strategy.entry_long}`",
+                f"- Exit Long: `{strategy.exit_long}`",
+            ])
+            if strategy.entry_short:
+                answer_parts.append(f"- Entry Short: `{strategy.entry_short}`")
+            if strategy.stop_loss_pct:
+                answer_parts.append(f"- Stop Loss: {strategy.stop_loss_pct*100:.1f}%")
+
+            return {
+                "type": "engine_signals",
+                "answer": "\n".join(answer_parts),
+                "signals": recent,
+                "total_signals": len(signals),
+                "strategy_name": strategy.name,
+                "symbols": symbols,
+            }
 
     # ── Strategy Builder Handler ──────────────────────────────────────────
     async def _handle_strategy_builder(self, symbols: list[str], query: str) -> dict[str, Any]:
