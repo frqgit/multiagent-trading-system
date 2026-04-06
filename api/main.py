@@ -19,6 +19,7 @@ from api.routes.live_trading import router as live_trading_router
 from api.routes.strategy import router as strategy_router
 from api.routes.engine import router as engine_router
 from api.routes.trading import router as trading_router
+from api.routes.ws import router as ws_router
 from core.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,8 @@ _allowed_origins = [
 ] or [
     "http://localhost:8501",
     "http://127.0.0.1:8501",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "https://*.streamlit.app",
 ]
 app.add_middleware(
@@ -93,6 +96,7 @@ app.include_router(ibkr_router)
 app.include_router(live_trading_router)
 app.include_router(strategy_router)
 app.include_router(engine_router)
+app.include_router(ws_router)
 
 
 @app.get("/")
