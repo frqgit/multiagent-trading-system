@@ -2147,21 +2147,17 @@ def _render_engine_page():
 
 
 def _fetch_market_snapshot(symbol: str) -> dict | None:
-    """Fetch a single stock snapshot from the backend."""
+    """Fetch a single stock snapshot directly via yfinance (no backend needed)."""
     try:
-        with httpx.Client(timeout=20) as client:
-            resp = client.post(
-                f"{API_BASE}/analyze",
-                json={"message": f"Quick status {symbol}"},
-                headers=_auth_headers(),
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list) and data:
-                    return data[0]
-                return data
-    except Exception:
-        pass
+        from tools.stock_api import fetch_stock_data
+        snap = fetch_stock_data(symbol)
+        d = snap.to_dict()
+        # Normalise field names the dashboard expects
+        d["price"] = d.pop("current_price", 0)
+        return {"market_data": d}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Market snapshot failed for %s: %s", symbol, exc)
     return None
 
 
@@ -2357,6 +2353,15 @@ def _render_trading_dashboard():
             snap = _fetch_market_snapshot(active)
             if snap:
                 st.session_state.db_market_cache[active] = snap
+
+    # ── Pre-fetch watchlist symbols not yet cached (batch, fast) ──
+    uncached = [s for s in st.session_state.db_watchlist if s not in st.session_state.db_market_cache and s != active]
+    if uncached:
+        with st.spinner(f"Loading watchlist ({len(uncached)} symbols)..."):
+            for sym in uncached:
+                snap = _fetch_market_snapshot(sym)
+                if snap:
+                    st.session_state.db_market_cache[sym] = snap
 
     active_data = st.session_state.db_market_cache.get(active, {})
     market = active_data.get("market_data", {}) if isinstance(active_data, dict) else {}
