@@ -36,6 +36,7 @@ alembic>=1.14,<2
 
 # UI
 streamlit>=1.41,<2
+plotly>=5.18,<6
 pandas>=2.0,<3
 
 # Config
