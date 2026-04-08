@@ -1,0 +1,112 @@
+/* ── IRESS ViewPoint Grid Layout ── */
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#dashboard {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-rows: 1.2fr 1fr;
+  grid-template-areas:
+    "watchlist chart orderbook"
+    "signals portfolio portfolio";
+  gap: 4px;
+  padding: 4px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  min-height: 0;
+}
+
+#panel-watchlist  { grid-area: watchlist; }
+#panel-chart      { grid-area: chart; }
+#panel-orderbook  { grid-area: orderbook; }
+#panel-signals    { grid-area: signals; }
+#panel-portfolio  { grid-area: portfolio; }
+
+/* ── Panel common ── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-panel);
+  min-height: 0;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-panel-header);
+  border-bottom: 1px solid var(--border-primary);
+  user-select: none;
+  min-height: 32px;
+  flex-shrink: 0;
+}
+
+.panel-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-header-title .icon { font-size: 14px; }
+.panel-header-title .label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  min-height: 0;
+}
+
+/* ── Responsive breakpoints ── */
+@media (max-width: 1200px) {
+  #dashboard {
+    grid-template-columns: 3fr 7fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    grid-template-areas:
+      "watchlist chart"
+      "orderbook signals"
+      "portfolio portfolio";
+  }
+}
+
+@media (max-width: 768px) {
+  #dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "watchlist"
+      "chart"
+      "orderbook"
+      "signals"
+      "portfolio";
+    overflow-y: auto;
+  }
+
+  .panel {
+    min-height: 300px;
+  }
+}

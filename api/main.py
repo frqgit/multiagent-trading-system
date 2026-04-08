@@ -7,8 +7,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.routes.admin import router as admin_router
 from api.routes.analysis import router as analysis_router
@@ -106,3 +109,9 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs",
     }
+
+
+# Serve vanilla HTML5 dashboard from /dashboard
+_static_dir = Path(__file__).resolve().parent.parent / "frontend" / "static"
+if _static_dir.is_dir():
+    app.mount("/dashboard", StaticFiles(directory=str(_static_dir), html=True), name="dashboard")

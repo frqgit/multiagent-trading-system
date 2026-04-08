@@ -1,0 +1,106 @@
+/* ── TradingEdge IRESS ViewPoint Dark Theme ── */
+
+:root {
+  /* Surfaces */
+  --bg-primary: #0a0e17;
+  --bg-secondary: #0f1623;
+  --bg-panel: #131a2a;
+  --bg-panel-header: #1a2236;
+  --bg-hover: #1e293b;
+  --bg-input: #0d1321;
+
+  /* Borders */
+  --border-primary: #1e293b;
+  --border-active: #3b82f6;
+  --border-subtle: #162032;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-bright: #f8fafc;
+
+  /* Accent */
+  --accent-blue: #3b82f6;
+  --accent-blue-dim: #1e40af;
+  --accent-cyan: #06b6d4;
+
+  /* Trade colors */
+  --color-buy: #22c55e;
+  --color-buy-dim: #166534;
+  --color-buy-bg: rgba(34, 197, 94, 0.08);
+  --color-sell: #ef4444;
+  --color-sell-dim: #991b1b;
+  --color-sell-bg: rgba(239, 68, 68, 0.08);
+  --color-hold: #f59e0b;
+  --color-hold-dim: #92400e;
+
+  /* Signal confidence */
+  --signal-strong: #22c55e;
+  --signal-moderate: #f59e0b;
+  --signal-weak: #ef4444;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Font */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Shadows */
+  --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Utility Classes ── */
+.mono { font-family: var(--font-mono); }
+.text-buy { color: var(--color-buy); }
+.text-sell { color: var(--color-sell); }
+.text-hold { color: var(--color-hold); }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-buy { background: var(--color-buy-bg); color: var(--color-buy); }
+.badge-sell { background: var(--color-sell-bg); color: var(--color-sell); }
+.badge-hold { background: rgba(245, 158, 11, 0.1); color: var(--color-hold); }
